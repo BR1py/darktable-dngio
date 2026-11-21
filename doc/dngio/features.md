@@ -28,6 +28,11 @@ darkroom adjustments such as exposure, color grading, and sharpening are not
 baked into the raw pixels. Use a rendered format such as JPEG or TIFF when
 you want to export the edited appearance.
 
+![DNG export panel showing target version, compression, quality, encoding effort, preview size, crop, and XMP sidecar controls](images/export_dialog.png)
+
+Example settings for DNG 1.7.1 with lossy mosaic compression. The settings
+shown are an example rather than the export defaults.
+
 ### Target version and compression
 
 The **DNG target version** controls the available compression modes:
