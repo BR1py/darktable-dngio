@@ -12,3 +12,7 @@ if(WIN32)
 endif(WIN32)
 
 add_subdirectory(unittests)
+
+if(USE_LIBRAW AND USE_DNGIO)
+  add_subdirectory("${PROJECT_SOURCE_DIR}/tests/dngio" "${CMAKE_CURRENT_BINARY_DIR}/dngio")
+endif()

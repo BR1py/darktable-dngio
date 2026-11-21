@@ -1,1 +1,12 @@
 /CMakeLists.txt export-subst
+
+# Approved dngio fixtures are stored with Git LFS.
+tests/dngio/fixtures/TEST1.ARW filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/TEST2.dng filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/TEST2.lossy-d0.50-3ev.dng filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/TEST2_loss_dng_converter.dng filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/TEST2_lossy_dng_converter.dng filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/TEST3.dng filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/TEST4.dng filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/TEST5.ORF filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/TEST6.dng filter=lfs diff=lfs merge=lfs -text

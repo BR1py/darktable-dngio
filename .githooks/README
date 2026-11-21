@@ -1,3 +1,8 @@
-To activate:
+To activate this repository's hooks:
 
-$ git config core.hooksPath .githooks
+  git config core.hooksPath .githooks
+  git lfs install --local
+
+The pre-commit hook is inherited from darktable. The post-checkout,
+post-commit, post-merge, and pre-push hooks invoke Git LFS for the approved
+DNG test fixtures. Installing these hooks does not upload or commit files.

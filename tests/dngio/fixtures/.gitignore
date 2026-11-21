@@ -1,0 +1,14 @@
+*
+!.gitignore
+!README.md
+!LICENSE.md
+!SHA256SUMS
+!TEST1.ARW
+!TEST2.dng
+!TEST2.lossy-d0.50-3ev.dng
+!TEST2_loss_dng_converter.dng
+!TEST2_lossy_dng_converter.dng
+!TEST3.dng
+!TEST4.dng
+!TEST5.ORF
+!TEST6.dng
