@@ -26,7 +26,10 @@ jobs:
           lfs: false
       # Read the checked-out .lfsconfig before fetching from the fixture repository.
       - name: Fetch test fixtures
-        run: git lfs pull
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/src/external/LibRaw"
+          git lfs pull
       - name: Install build dependencies
         run: tools/install-dngio-build-deps.sh
       - name: Build and test
