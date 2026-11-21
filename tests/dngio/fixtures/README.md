@@ -5,6 +5,12 @@ The nine image files were supplied by BR1py and dedicated under
 files. They are explicitly allowed by `.gitignore` and tracked through Git LFS
 via the repository's `.gitattributes`. Run `git lfs pull` after checkout.
 
+The repository's `.lfsconfig` selects
+[BR1py/darktable-dngio-fixtures](https://github.com/BR1py/darktable-dngio-fixtures)
+as the LFS endpoint. This standalone repository hosts the images because
+GitHub blocks new LFS objects in the upstream darktable public fork network.
+The same sanitized files, checksums, and CC0 dedication are published there.
+
 Author fields use BR1py. Camera/lens serial values and private directory paths
 have been cleared. Do not replace a fixture with an unsanitized original.
 

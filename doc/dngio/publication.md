@@ -1,7 +1,8 @@
 # Publication preparation
 
-The LibRaw integration commit is published. DT changes are organized into local
-commits; the DT push, Git LFS upload, and release tag remain pending.
+The LibRaw integration commit and standalone fixture repository are published.
+DT changes are organized into logical commits. Remote source availability,
+hosted CI, and release tagging must be verified separately from local validation.
 
 | Item | Repository location | State |
 | --- | --- | --- |
@@ -9,7 +10,7 @@ commits; the DT push, Git LFS upload, and release tag remain pending.
 | Adobe SDK and matching JPEG XL sources | `src/external/adobe-dng-sdk/` | Sources, licenses, original archive hash, imported hashes, and local-change patch are included. |
 | Build and dependency scripts | `tools/build-dngio.sh`, `tools/install-dngio-build-deps.sh` | Repository-owned entry points replace workspace dependencies. |
 | AppImage packaging | `packaging/AppImage/build-dngio.sh` | Repository-owned packaging script includes local license records. |
-| Approved test images | `tests/dngio/fixtures/` | CC0 dedication, checksums, sanitized metadata, Git LFS attributes, and privacy regression test are prepared. LFS objects have not been uploaded. |
+| Approved test images | `tests/dngio/fixtures/`, `.lfsconfig` | All nine sanitized CC0 images and their checksum/license records are published in the standalone [fixture repository](https://github.com/BR1py/darktable-dngio-fixtures), which supplies LFS storage. GitHub rejected uploads to the public DT fork's own LFS endpoint. |
 | Feature switch | `DefineOptions.cmake` | `USE_DNGIO` selects SDK import/export and dngio test registration; disabled builds use the base version. |
 | Fork CI | `.github/workflows/dngio.yml` | Enabled/disabled build jobs are prepared. Hosted execution requires publishing the workflow and LFS objects. |
 | Build and test instructions | `doc/dngio/build.md`, `tests/dngio/README.md` | Commands and scope are documented. |
@@ -30,13 +31,14 @@ combination, lossless raw-sample round trips, previews, threading, crop/XMP
 behavior, fixture privacy, and invalid exports. They do not cover GUI behavior,
 OpenCL, other platforms, or compatibility with older Linux distributions.
 
-## Remaining publication steps
+## Publication checks
 
 After reviewing local build and test results:
 
 1. Review the intended files, including all vendored sources, licenses, Git LFS
    pointers, and fixture dedication. Keep generated builds and outputs excluded.
-2. Push the reviewed DT branch and its LFS objects.
+2. Push the reviewed DT branch and verify that its LFS objects are available
+   from the configured fixture repository.
 3. Clone `dngio-5.6.2` into a fresh directory with submodules and LFS objects;
    repeat the documented build and tests without the original workspace.
 4. Review hosted CI results, choose the fork's default branch, and tag the

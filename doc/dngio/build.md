@@ -17,8 +17,11 @@ sudo tools/install-dngio-build-deps.sh
 tools/build-dngio.sh
 ```
 
-These checkout commands apply after the prepared changes have been published.
-Until then, use this local checkout; the DT push remains pending.
+The root `.lfsconfig` directs image downloads to the standalone
+[`BR1py/darktable-dngio-fixtures`](https://github.com/BR1py/darktable-dngio-fixtures)
+repository. Source code remains in the DT fork; no extra checkout is needed
+for the test images. GitHub restricts new LFS uploads to public forks when
+their upstream repository network has no existing LFS objects.
 
 The helper builds and installs the bundled JPEG XL sources, configures DT with
 `USE_DNGIO=ON`, builds it, runs CTest, and installs into `install-dngio/`.
