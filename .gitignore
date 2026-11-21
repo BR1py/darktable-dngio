@@ -27,3 +27,6 @@ CMakeLists.txt.user
 workspace/
 cmake-build-debug/
 .idea/
+
+/install-dngio*/
+/dist/

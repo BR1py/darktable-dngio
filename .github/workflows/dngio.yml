@@ -1,0 +1,33 @@
+name: dngio
+on:
+  push:
+    branches: [master, 'dngio-*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-and-test:
+    if: github.repository == 'BR1py/darktable-dngio'
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        dngio: ['ON', 'OFF']
+    steps:
+      - name: Install checkout prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git git-lfs ca-certificates
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          lfs: true
+      - name: Install build dependencies
+        run: tools/install-dngio-build-deps.sh
+      - name: Build and test
+        env:
+          DNGIO: ${{ matrix.dngio }}
+          JOBS: '2'
+        run: tools/build-dngio.sh
