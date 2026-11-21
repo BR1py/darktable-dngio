@@ -42,7 +42,9 @@ typedef enum dt_imageio_format_flags_t
 {
   FORMAT_FLAGS_SUPPORT_XMP = 1,
   FORMAT_FLAGS_NO_TMPFILE = 2,
-  FORMAT_FLAGS_SUPPORT_LAYERS = 4
+  FORMAT_FLAGS_SUPPORT_LAYERS = 4,
+  FORMAT_FLAGS_NO_GLOBAL_OPTIONS = 8,
+  FORMAT_FLAGS_RAW_EXPORT = 16
 } dt_imageio_format_flags_t;
 
 /**

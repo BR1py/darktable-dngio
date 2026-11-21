@@ -17,6 +17,11 @@ add_library(ppm MODULE "ppm.c")
 add_library(pfm MODULE "pfm.c")
 add_library(tiff MODULE "tiff.c")
 
+if(USE_DNGIO)
+  list(APPEND MODULES "dng")
+  add_library(dng MODULE "dng.c")
+endif()
+
 if(JXL_FOUND)
   list(APPEND MODULES "jxl_format")
   add_library(jxl_format MODULE "jxl.c")

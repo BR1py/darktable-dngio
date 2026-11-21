@@ -94,7 +94,7 @@
 //      - raw denoise (Bayer): pre-process the sensor CFA (black/WB/
 //        pack), run tiled inference via dt_restore_raw_bayer(), un-
 //        process and re-mosaic, write a CFA DNG via
-//        dt_imageio_dng_write_cfa_bayer().
+//        dt_imageio_dng_write_cfa_mosaic().
 //      - raw denoise (X-Trans / linear): demosaic via the darktable
 //        pipe (rawprepare + highlights + demosaic only), run
 //        dt_restore_raw_linear(), write a LinearRaw DNG via
@@ -1290,7 +1290,7 @@ static int _process_raw_denoise_bayer(dt_neural_job_t *j,
              "[neural_restore] no embedded preview in source (rc=%d) — "
              "writing DNG without thumbnail", prev_rc);
   }
-  res = dt_imageio_dng_write_cfa_bayer(out_filename, cfa_out,
+  res = dt_imageio_dng_write_cfa_mosaic(out_filename, cfa_out,
                                        width, height, img_meta,
                                        exif_blob, exif_len,
                                        jpeg_buf ? &preview : NULL);

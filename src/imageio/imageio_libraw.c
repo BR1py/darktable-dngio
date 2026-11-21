@@ -35,6 +35,12 @@
 #include <stdio.h>
 #include <strings.h>
 
+#ifdef HAVE_ADOBE_DNG_SDK
+void *dt_libraw_dngsdk_create_host(void);
+void dt_libraw_dngsdk_set_host(libraw_data_t *raw, void *host);
+void dt_libraw_dngsdk_destroy_host(void *host);
+#endif
+
 
 typedef struct model_map
 {
@@ -303,7 +309,13 @@ static gboolean _supported_image(const gchar *filename)
   // At the moment of writing this code CR3 files are not supported by RawSpeed,
   // so they are always processed by LibRaw.
   gchar *extensions_whitelist;
+#ifdef HAVE_ADOBE_DNG_SDK
+  // RawSpeed cannot decode JPEG XL-compressed DNG data. Route DNG through the
+  // bundled LibRaw when its Adobe DNG SDK decoder is enabled.
+  const gchar *always_by_libraw = "cr3 x3f dng";
+#else
   const gchar *always_by_libraw = "cr3 x3f";
+#endif
 
   gchar *ext = g_strrstr(filename, ".");
   if(!ext)
@@ -395,6 +407,19 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img,
   if(!raw)
     return DT_IMAGEIO_LOAD_FAILED;
 
+#ifdef HAVE_ADOBE_DNG_SDK
+  void *dng_host = dt_libraw_dngsdk_create_host();
+  dt_libraw_dngsdk_set_host(raw, dng_host);
+  // Adobe's lossy mosaic JXL encoder writes a mandatory OpcodeList2
+  // polynomial map that restores the normalized 0..65535 payload to the
+  // camera's raw range. Apply Stage 2/3 inside the DNG SDK; darktable's own
+  // opcode reader does not implement this opcode.
+  raw->rawparams.options |= LIBRAW_RAWOPTIONS_DNG_STAGE23_IFPRESENT_JPGJXL
+                            | LIBRAW_RAWOPTIONS_DNG_STAGE2_IFPRESENT
+                            | LIBRAW_RAWOPTIONS_DNG_STAGE3_IFPRESENT
+                            | LIBRAW_RAWOPTIONS_DNG_ALLOWSIZECHANGE;
+#endif
+
 #if defined(_WIN32) && (defined(UNICODE) || defined(_UNICODE))
   wchar_t *wfilename = g_utf8_to_utf16(filename, -1, NULL, NULL, NULL);
   libraw_err = libraw_open_wfile(raw, wfilename);
@@ -409,13 +434,15 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img,
   if(libraw_err != LIBRAW_SUCCESS)
     goto error;
 
+  const gboolean linear_raw = raw->rawdata.color3_image || raw->rawdata.float3_image;
+
   // Bad method to detect if camera is fully supported by LibRaw,
   // but seems to be the best available. LibRaw crx decoder can actually
   // decode the raw data, but internal metadata like wb_coeffs, crops etc.
   // are not populated into libraw structure, or image is not of CFA type.
   if(raw->rawdata.color.cam_mul[0] == 0.0f
      || dt_isnan(raw->rawdata.color.cam_mul[0])
-     || !raw->rawdata.raw_image)
+     || (!raw->rawdata.raw_image && !linear_raw))
   {
     dt_print(DT_DEBUG_ALWAYS,
              "[libraw_open] detected unsupported image `%s'", img->filename);
@@ -469,9 +496,14 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img,
 
   img->p_width = img->width - img->crop_x - img->crop_right;
   img->p_height = img->height - img->crop_y - img->crop_bottom;
-  // We can reuse the libraw filters property, it's already well-handled in dt.
-  // It contains (for CR3) the Bayer pattern, but we have to undo some LibRaw logic.
-  if(raw->rawdata.iparams.colors == 3)
+  // Linear DNG data already has three color samples per pixel and therefore
+  // does not have a CFA pattern. For mosaiced data we can reuse the LibRaw
+  // filters property; it is already well-handled in darktable.
+  if(linear_raw)
+  {
+    img->buf_dsc.filters = 0u;
+  }
+  else if(raw->rawdata.iparams.colors == 3)
   {
     // Workaround for 3 color filters (ok for CR3) from LibRaw::pre_interpolate()
     img->buf_dsc.filters = raw->rawdata.iparams.filters & ~((raw->rawdata.iparams.filters & 0x55555555U) << 1);
@@ -489,11 +521,9 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img,
 
   dt_exif_img_check_additional_tags(img, filename);
 
-  // For CR3, we only have Bayer data and a single channel
-  img->buf_dsc.channels = 1;
-
-  img->buf_dsc.datatype = TYPE_UINT16;
-  img->buf_dsc.cst = IOP_CS_RAW;
+  img->buf_dsc.channels = linear_raw ? 4 : 1;
+  img->buf_dsc.datatype = linear_raw ? TYPE_FLOAT : TYPE_UINT16;
+  img->buf_dsc.cst = linear_raw ? IOP_CS_RGB : IOP_CS_RAW;
 
   // Allocate and copy image from libraw buffer to dt
   void *buf = dt_mipmap_cache_alloc(mbuf, img);
@@ -506,19 +536,56 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img,
     goto error;
   }
 
-  // Use faster memcpy if buffer sizes are equal
-  const size_t bufSize_mipmap = (size_t)img->width * img->height * sizeof(uint16_t);
-  const size_t bufSize_libraw = (size_t)raw->rawdata.sizes.raw_pitch * raw->rawdata.sizes.raw_height;
-  if(bufSize_mipmap == bufSize_libraw)
+  if(linear_raw)
   {
-    memcpy(buf, raw->rawdata.raw_image, bufSize_mipmap);
+    const size_t pitch = raw->rawdata.sizes.raw_pitch;
+    DT_OMP_FOR()
+    for(int row = 0; row < img->height; row++)
+    {
+      float *out = (float *)buf + (size_t)4 * row * img->width;
+
+      if(raw->rawdata.color3_image)
+      {
+        const uint16_t (*in)[3] = (const uint16_t (*)[3])
+          ((const char *)raw->rawdata.color3_image + (size_t)row * pitch);
+        for(int col = 0; col < img->width; col++, out += 4)
+        {
+          out[0] = (float)in[col][0] / (float)UINT16_MAX;
+          out[1] = (float)in[col][1] / (float)UINT16_MAX;
+          out[2] = (float)in[col][2] / (float)UINT16_MAX;
+          out[3] = 0.0f;
+        }
+      }
+      else
+      {
+        const float (*in)[3] = (const float (*)[3])
+          ((const char *)raw->rawdata.float3_image + (size_t)row * pitch);
+        for(int col = 0; col < img->width; col++, out += 4)
+        {
+          out[0] = in[col][0];
+          out[1] = in[col][1];
+          out[2] = in[col][2];
+          out[3] = 0.0f;
+        }
+      }
+    }
   }
   else
   {
-    dt_imageio_flip_buffers((char *)buf, (char *)raw->rawdata.raw_image, sizeof(uint16_t),
-                            raw->rawdata.sizes.raw_width, raw->rawdata.sizes.raw_height,
-                            raw->rawdata.sizes.raw_width, raw->rawdata.sizes.raw_height,
-                            raw->rawdata.sizes.raw_pitch, ORIENTATION_NONE);
+    // Use faster memcpy if buffer sizes are equal
+    const size_t bufSize_mipmap = (size_t)img->width * img->height * sizeof(uint16_t);
+    const size_t bufSize_libraw = (size_t)raw->rawdata.sizes.raw_pitch * raw->rawdata.sizes.raw_height;
+    if(bufSize_mipmap == bufSize_libraw)
+    {
+      memcpy(buf, raw->rawdata.raw_image, bufSize_mipmap);
+    }
+    else
+    {
+      dt_imageio_flip_buffers((char *)buf, (char *)raw->rawdata.raw_image, sizeof(uint16_t),
+                              raw->rawdata.sizes.raw_width, raw->rawdata.sizes.raw_height,
+                              raw->rawdata.sizes.raw_width, raw->rawdata.sizes.raw_height,
+                              raw->rawdata.sizes.raw_pitch, ORIENTATION_NONE);
+    }
   }
 
   // Checks not really required for CR3 support, but it's taken from the old dt libraw integration
@@ -531,7 +598,13 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img,
     img->flags &= ~DT_IMAGE_4BAYER;
   }
 
-  if(img->buf_dsc.filters)
+  if(linear_raw)
+  {
+    img->flags &= ~DT_IMAGE_LDR;
+    img->flags &= ~DT_IMAGE_RAW;
+    img->flags |= DT_IMAGE_S_RAW;
+  }
+  else if(img->buf_dsc.filters)
   {
     img->flags &= ~DT_IMAGE_LDR;
     img->flags &= ~DT_IMAGE_HDR;
@@ -575,6 +648,9 @@ error:
     }
   }
   libraw_close(raw);
+#ifdef HAVE_ADOBE_DNG_SDK
+  dt_libraw_dngsdk_destroy_host(dng_host);
+#endif
   return err;
 }
 #endif

@@ -161,7 +161,7 @@ manifest-only change.
 5. postprocessing: invert the normalisation and WB, optional scalar
    mean-match (`match_gain`) to keep tile gain consistent
 6. re-mosaic back to the same CFA layout, write uint16 mosaic to a
-   CFA Bayer DNG via `dt_imageio_dng_write_cfa_bayer`
+   CFA mosaic DNG via `dt_imageio_dng_write_cfa_mosaic`
 
 **Linear variant** (X-Trans, Foveon, etc.):
 

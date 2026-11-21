@@ -20,7 +20,7 @@
 //
 // Three entry points for three different DNG flavors:
 //   - dt_imageio_dng_write_float      32-bit float CFA (HDR merge)
-//   - dt_imageio_dng_write_cfa_bayer  16-bit uint Bayer CFA (raw round-trip)
+//   - dt_imageio_dng_write_cfa_mosaic 16-bit uint Bayer/X-Trans CFA (raw round-trip)
 //   - dt_imageio_dng_write_linear     16-bit uint LinearRaw 3ch (demosaicked)
 //
 // The float writer is hand-rolled byte assembly into a small TIFF
@@ -79,7 +79,7 @@ void dt_imageio_dng_write_float(const char *filename,
                                 const dt_aligned_pixel_t wb_coeffs,
                                 const float adobe_XYZ_to_CAM[4][3]);
 
-// @brief Write a Bayer CFA mosaic as a DNG file.
+// @brief Write a Bayer or X-Trans CFA mosaic as a DNG file.
 //
 // The output file contains a single IFD with PhotometricInterpretation=CFA.
 // All DNG metadata required for darktable re-import is sourced from @p img:
@@ -91,21 +91,26 @@ void dt_imageio_dng_write_float(const char *filename,
 //   - Make / Model / UniqueModel   from img->camera_maker / camera_model
 //
 // @param filename output path (UTF-8)
-// @param cfa      Bayer mosaic (uint16, width * height samples, row-major)
+// @param cfa      CFA mosaic (uint16, width * height samples, row-major)
 // @param width    image width in pixels (CFA samples per row)
 // @param height   image height in rows
 // @param img      source image, for DNG metadata
 // @param exif_blob optional Exif blob to embed (NULL = skip)
 // @param exif_len  size of exif_blob in bytes
 // @return 0 on success, non-zero on failure (file is removed on failure)
-int dt_imageio_dng_write_cfa_bayer(const char *filename,
-                                   const uint16_t *cfa,
-                                   int width,
-                                   int height,
-                                   const struct dt_image_t *img,
-                                   const void *exif_blob,
-                                   int exif_len,
-                                   const dt_imageio_dng_preview_t *preview);
+int dt_imageio_dng_write_cfa_mosaic(const char *filename,
+                                    const uint16_t *cfa,
+                                    int width,
+                                    int height,
+                                    const struct dt_image_t *img,
+                                    const void *exif_blob,
+                                    int exif_len,
+                                    const dt_imageio_dng_preview_t *preview);
+
+// In-memory equivalent without previews; the caller owns the returned GBytes.
+GBytes *dt_imageio_dng_write_cfa_mosaic_memory(const uint16_t *cfa, int width, int height,
+                                              const struct dt_image_t *img,
+                                              const void *exif_blob, int exif_len);
 
 // @brief Write a demosaicked 3-channel linear DNG.
 //

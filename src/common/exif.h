@@ -94,6 +94,8 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename);
 
 /** write blob to file exif. merges with existing exif information.*/
 int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int compressed);
+GBytes *dt_exif_write_blob_to_memory(const void *data, size_t length,
+                                    uint8_t *blob, uint32_t size);
 
 /** write xmp sidecar file. */
 /** if force_write is FALSE, the current contents of the sidecar file are compared against what
@@ -101,6 +103,12 @@ int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int
     timestamp for the case where multiple computers share a drive and the crawler is used to
     find new edits. */
 gboolean dt_exif_xmp_write(const dt_imgid_t imgid, const char *filename, const gboolean force_write);
+
+/** Write a sidecar for a physically cropped raw export. Masks and geometric
+ * operations are reset because their original coordinate system no longer
+ * exists. Returns TRUE in case of errors. */
+gboolean dt_exif_xmp_write_reset_geometry(const dt_imgid_t imgid,
+                                          const char *filename);
 
 /** write xmp packet inside an image. */
 gboolean dt_exif_xmp_attach_export(const dt_imgid_t imgid, const char *filename, void *metadata,

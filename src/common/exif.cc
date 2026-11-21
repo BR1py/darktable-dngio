@@ -2633,6 +2633,53 @@ gboolean dt_exif_read(dt_image_t *img,
   }
 }
 
+static void _exif_apply_blob(Exiv2::Image *image, uint8_t *blob, uint32_t size,
+                           const int compressed)
+{
+  read_metadata_threadsafe(image);
+  Exiv2::ExifData &imgExifData = image->exifData();
+  Exiv2::ExifData blobExifData;
+  Exiv2::ExifParser::decode(blobExifData, blob, size);
+  Exiv2::ExifData::const_iterator end = blobExifData.end();
+  Exiv2::ExifData::iterator it;
+  for(Exiv2::ExifData::const_iterator i = blobExifData.begin(); i != end; ++i)
+  {
+    // add() does not override! We need to delete existing key first.
+    Exiv2::ExifKey key(i->key());
+    if((it = imgExifData.findKey(key)) != imgExifData.end()) imgExifData.erase(it);
+
+    imgExifData.add(Exiv2::ExifKey(i->key()), &i->value());
+  }
+
+  {
+    // Remove thumbnail
+    static const char *keys[] = {
+      "Exif.Thumbnail.Compression",
+      "Exif.Thumbnail.XResolution",
+      "Exif.Thumbnail.YResolution",
+      "Exif.Thumbnail.ResolutionUnit",
+      "Exif.Thumbnail.JPEGInterchangeFormat",
+      "Exif.Thumbnail.JPEGInterchangeFormatLength"
+    };
+    static const guint n_keys = G_N_ELEMENTS(keys);
+    _remove_exif_keys(imgExifData, keys, n_keys);
+  }
+
+  // Only compressed images may set PixelXDimension and PixelYDimension.
+  if(!compressed)
+  {
+    static const char *keys[] = {
+      "Exif.Photo.PixelXDimension",
+      "Exif.Photo.PixelYDimension"
+    };
+    static const guint n_keys = G_N_ELEMENTS(keys);
+    _remove_exif_keys(imgExifData, keys, n_keys);
+  }
+
+  imgExifData.sortByTag();
+  write_metadata_threadsafe(image);
+}
+
 int dt_exif_write_blob(uint8_t *blob,
                        uint32_t size,
                        const char *path,
@@ -2642,48 +2689,7 @@ int dt_exif_write_blob(uint8_t *blob,
   {
     std::unique_ptr<Exiv2::Image> image(Exiv2::ImageFactory::open(WIDEN(path)));
     assert(image.get() != 0);
-    read_metadata_threadsafe(image);
-    Exiv2::ExifData &imgExifData = image->exifData();
-    Exiv2::ExifData blobExifData;
-    Exiv2::ExifParser::decode(blobExifData, blob, size);
-    Exiv2::ExifData::const_iterator end = blobExifData.end();
-    Exiv2::ExifData::iterator it;
-    for(Exiv2::ExifData::const_iterator i = blobExifData.begin(); i != end; ++i)
-    {
-      // add() does not override! We need to delete existing key first.
-      Exiv2::ExifKey key(i->key());
-      if((it = imgExifData.findKey(key)) != imgExifData.end()) imgExifData.erase(it);
-
-      imgExifData.add(Exiv2::ExifKey(i->key()), &i->value());
-    }
-
-    {
-      // Remove thumbnail
-      static const char *keys[] = {
-        "Exif.Thumbnail.Compression",
-        "Exif.Thumbnail.XResolution",
-        "Exif.Thumbnail.YResolution",
-        "Exif.Thumbnail.ResolutionUnit",
-        "Exif.Thumbnail.JPEGInterchangeFormat",
-        "Exif.Thumbnail.JPEGInterchangeFormatLength"
-      };
-      static const guint n_keys = G_N_ELEMENTS(keys);
-      _remove_exif_keys(imgExifData, keys, n_keys);
-    }
-
-    // Only compressed images may set PixelXDimension and PixelYDimension.
-    if(!compressed)
-    {
-      static const char *keys[] = {
-        "Exif.Photo.PixelXDimension",
-        "Exif.Photo.PixelYDimension"
-      };
-      static const guint n_keys = G_N_ELEMENTS(keys);
-      _remove_exif_keys(imgExifData, keys, n_keys);
-    }
-
-    imgExifData.sortByTag();
-    write_metadata_threadsafe(image);
+    _exif_apply_blob(image.get(), blob, size, compressed);
   }
   catch(const Exiv2::AnyError &e)
   {
@@ -2694,6 +2700,23 @@ int dt_exif_write_blob(uint8_t *blob,
     return 0;
   }
   return 1;
+}
+
+GBytes *dt_exif_write_blob_to_memory(const void *data, const size_t length,
+                                    uint8_t *blob, const uint32_t size)
+{
+  try
+  {
+    auto image = Exiv2::ImageFactory::open((const Exiv2::byte *)data, length);
+    if(!image) return nullptr;
+    _exif_apply_blob(image.get(), blob, size, 0);
+    return g_bytes_new(image->io().mmap(), image->io().size());
+  }
+  catch(const Exiv2::AnyError &e)
+  {
+    dt_print(DT_DEBUG_IMAGEIO, "[exiv2 dt_exif_write_blob_to_memory] %s", e.what());
+    return nullptr;
+  }
 }
 
 static void _remove_exif_geotag(Exiv2::ExifData &exifData)
@@ -4704,7 +4727,8 @@ gboolean dt_exif_xmp_read(dt_image_t *img,
 // add history metadata to XmpData
 static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
                                 const dt_imgid_t imgid,
-                                int history_end)
+                                int history_end,
+                                const gboolean reset_geometry = FALSE)
 {
   sqlite3_stmt *stmt;
 
@@ -4730,6 +4754,9 @@ static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
+    // Masks use coordinates in the original raw image. A physically cropped
+    // DNG gets a new coordinate system, so export an empty mask history.
+    if(reset_geometry) continue;
     const int32_t mask_num = sqlite3_column_int(stmt, 8);
     const int32_t mask_id = sqlite3_column_int(stmt, 1);
     const int32_t mask_type = sqlite3_column_int(stmt, 2);
@@ -4777,6 +4804,10 @@ static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
 
   // History stack:
   num = 1;
+  int reset_history_end = 0;
+  GHashTable *reset_operations = reset_geometry
+    ? g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL)
+    : NULL;
 
   // Create an array:
   Exiv2::XmpTextValue tv("");
@@ -4810,17 +4841,37 @@ static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
 
     if(!operation) continue; // no op is fatal.
 
-    char *params = dt_exif_xmp_encode((const unsigned char *)params_blob, params_len, NULL);
+    // A physically cropped DNG has a new coordinate system. Keep one base
+    // history entry for every affected operation, but serialize it disabled
+    // and with an empty parameter blob. The history loader interprets an
+    // empty blob as the module's defaults.  Omitting the entry altogether is
+    // not sufficient: unused modules retain iop_order == INT_MAX and are then
+    // hidden even from the "all modules" group.
+    const dt_iop_module_so_t *module_so = reset_geometry
+                                         ? dt_iop_get_module_so(operation)
+                                         : NULL;
+    const gboolean reset_module = reset_geometry
+      && ((module_so && (module_so->operation_tags() & IOP_TAG_DISTORT))
+          || !strcmp(operation, "spots") || !strcmp(operation, "retouch"));
+    if(reset_module)
+    {
+      if(g_hash_table_contains(reset_operations, operation)) continue;
+      g_hash_table_add(reset_operations, g_strdup(operation));
+    }
+
+    char *params = reset_module
+      ? strdup("")
+      : dt_exif_xmp_encode((const unsigned char *)params_blob, params_len, NULL);
 
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:num", num);
-    xmpData[key] = hist_num;
+    xmpData[key] = reset_geometry ? num - 1 : hist_num;
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:operation", num);
     xmpData[key] = operation;
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:enabled", num);
-    xmpData[key] = enabled;
+    xmpData[key] = reset_module ? 0 : enabled;
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:modversion", num);
     xmpData[key] = modversion;
@@ -4829,19 +4880,31 @@ static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
     xmpData[key] = params;
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:multi_name", num);
-    xmpData[key] = multi_name ? multi_name : "";
+    xmpData[key] = reset_module ? "" : (multi_name ? multi_name : "");
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:multi_name_hand_edited", num);
-    xmpData[key] = multi_name_hand_edited;
+    xmpData[key] = reset_module ? 0 : multi_name_hand_edited;
     snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:multi_priority", num);
-    xmpData[key] = multi_priority;
+    xmpData[key] = reset_module ? 0 : multi_priority;
 
-    if(blendop_blob)
+    if(blendop_blob && !reset_module)
     {
       // This shouldn't fail in general, but reading is robust enough to allow it,
       // and flipping images from LT will result in this being left out.
-      char *blendop_params =
-        dt_exif_xmp_encode((const unsigned char *)blendop_blob, blendop_params_len, NULL);
+      const unsigned char *blendop_data = (const unsigned char *)blendop_blob;
+      dt_develop_blend_params_t default_blend;
+      if(reset_geometry
+         && blendop_version == dt_develop_blend_version()
+         && blendop_params_len == (int)sizeof(default_blend))
+      {
+        const dt_develop_blend_params_t *old_blend =
+          (const dt_develop_blend_params_t *)blendop_blob;
+        dt_develop_blend_init_blend_parameters(&default_blend,
+                                                (dt_develop_blend_colorspace_t)old_blend->blend_cst);
+        blendop_data = (const unsigned char *)&default_blend;
+      }
+      char *blendop_params = dt_exif_xmp_encode(blendop_data,
+                                                blendop_params_len, NULL);
       snprintf(key, sizeof(key),
                "Xmp.darktable.history[%d]/darktable:blendop_version", num);
       xmpData[key] = blendop_version;
@@ -4853,12 +4916,64 @@ static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
 
     free(params);
 
+    if(history_end == -1 || hist_num < history_end) reset_history_end++;
     num++;
   }
 
+  // A module that has never appeared in this image's history is absent from
+  // the loop above. Add every user-visible geometric base module explicitly;
+  // otherwise its module instance can keep iop_order == INT_MAX and darktable
+  // hides it even from the "all modules" group. Empty params deliberately ask
+  // the importer to use the defaults appropriate for the newly cropped DNG.
+  if(reset_geometry)
+  {
+    for(const GList *iter = darktable.iop; iter; iter = g_list_next(iter))
+    {
+      const dt_iop_module_so_t *module_so = (const dt_iop_module_so_t *)iter->data;
+      if(!module_so
+         || !(module_so->operation_tags() & IOP_TAG_DISTORT)
+         || dt_iop_so_is_hidden(module_so)
+         || (module_so->flags() & IOP_FLAGS_DEPRECATED)
+         || g_hash_table_contains(reset_operations, module_so->op))
+        continue;
+
+      snprintf(key, sizeof(key),
+               "Xmp.darktable.history[%d]/darktable:num", num);
+      xmpData[key] = num - 1;
+      snprintf(key, sizeof(key),
+               "Xmp.darktable.history[%d]/darktable:operation", num);
+      xmpData[key] = module_so->op;
+      snprintf(key, sizeof(key),
+               "Xmp.darktable.history[%d]/darktable:enabled", num);
+      xmpData[key] = 0;
+      snprintf(key, sizeof(key),
+               "Xmp.darktable.history[%d]/darktable:modversion", num);
+      xmpData[key] = module_so->version();
+      snprintf(key, sizeof(key),
+               "Xmp.darktable.history[%d]/darktable:params", num);
+      xmpData[key] = "";
+      snprintf(key, sizeof(key),
+               "Xmp.darktable.history[%d]/darktable:multi_name", num);
+      xmpData[key] = "";
+      snprintf(key, sizeof(key),
+               "Xmp.darktable.history[%d]/darktable:multi_name_hand_edited", num);
+      xmpData[key] = 0;
+      snprintf(key, sizeof(key),
+               "Xmp.darktable.history[%d]/darktable:multi_priority", num);
+      xmpData[key] = 0;
+
+      g_hash_table_add(reset_operations, g_strdup(module_so->op));
+      reset_history_end++;
+      num++;
+    }
+  }
+
   sqlite3_finalize(stmt);
+  if(reset_operations) g_hash_table_destroy(reset_operations);
   if(history_end == -1)
     history_end = num - 1;
+  else if(reset_geometry)
+    history_end = reset_history_end;
   else
     history_end = MIN(history_end, num - 1); // safeguard for some old buggy libraries
 
@@ -5127,7 +5242,8 @@ static void _set_xmp_dt_metadata(Exiv2::XmpData &xmpData,
 // stuff goes wrong.
 static void _exif_xmp_read_data(Exiv2::XmpData &xmpData,
                                 const dt_imgid_t imgid,
-                                const char *info)
+                                const char *info,
+                                const gboolean reset_geometry = FALSE)
 {
   const double start = dt_get_debug_wtime();
   const int xmp_version = DT_XMP_EXIF_VERSION;
@@ -5230,7 +5346,7 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData,
     xmpData["Xmp.darktable.auto_presets_applied"] = 1;
   else
     xmpData["Xmp.darktable.auto_presets_applied"] = 0;
-  _set_xmp_dt_history(xmpData, imgid, history_end);
+  _set_xmp_dt_history(xmpData, imgid, history_end, reset_geometry);
 
   // We need to read the iop-order list
   xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
@@ -5240,32 +5356,36 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData,
   sqlite3_finalize(stmt);
   g_free(iop_order_list);
 
-  // Store history hash
-  dt_history_hash_values_t hash;
-  dt_history_hash_read(imgid, &hash);
-
-  if(hash.basic)
+  // A remapped crop changes the serialized history. Leave hashes out so the
+  // importer derives fresh values from that adapted history.
+  if(!reset_geometry)
   {
-    char* value = dt_exif_xmp_encode(hash.basic, hash.basic_len, NULL);
-    xmpData["Xmp.darktable.history_basic_hash"] = value;
-    free(value);
-  }
+    dt_history_hash_values_t hash;
+    dt_history_hash_read(imgid, &hash);
 
-  if(hash.auto_apply)
-  {
-    char* value = dt_exif_xmp_encode(hash.auto_apply, hash.auto_apply_len, NULL);
-    xmpData["Xmp.darktable.history_auto_hash"] = value;
-    free(value);
-  }
+    if(hash.basic)
+    {
+      char* value = dt_exif_xmp_encode(hash.basic, hash.basic_len, NULL);
+      xmpData["Xmp.darktable.history_basic_hash"] = value;
+      free(value);
+    }
 
-  if(hash.current)
-  {
-    char* value = dt_exif_xmp_encode(hash.current, hash.current_len, NULL);
-    xmpData["Xmp.darktable.history_current_hash"] = value;
-    free(value);
-  }
+    if(hash.auto_apply)
+    {
+      char* value = dt_exif_xmp_encode(hash.auto_apply, hash.auto_apply_len, NULL);
+      xmpData["Xmp.darktable.history_auto_hash"] = value;
+      free(value);
+    }
 
-  dt_history_hash_free(&hash);
+    if(hash.current)
+    {
+      char* value = dt_exif_xmp_encode(hash.current, hash.current_len, NULL);
+      xmpData["Xmp.darktable.history_current_hash"] = value;
+      free(value);
+    }
+
+    dt_history_hash_free(&hash);
+  }
 
   const double end = dt_get_debug_wtime();
   dt_print(DT_DEBUG_DEV,
@@ -5393,7 +5513,7 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData,
       xmpData["Xmp.darktable.auto_presets_applied"] = 1;
     else
       xmpData["Xmp.darktable.auto_presets_applied"] = 0;
-    _set_xmp_dt_history(xmpData, imgid, history_end);
+    _set_xmp_dt_history(xmpData, imgid, history_end, FALSE);
 
     // We need to read the iop-order list
     xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
@@ -6059,9 +6179,10 @@ gboolean dt_exif_xmp_attach_export(const dt_imgid_t imgid,
 }
 
 // Write XMP sidecar file: returns TRUE in case of errors.
-gboolean dt_exif_xmp_write(const dt_imgid_t imgid,
-                           const char *filename,
-                           const gboolean force_write)
+static gboolean _exif_xmp_write(const dt_imgid_t imgid,
+                                const char *filename,
+                                const gboolean force_write,
+                                const gboolean reset_geometry)
 {
   // Refuse to write sidecar for non-existent image:
   char imgfname[PATH_MAX] = { 0 };
@@ -6112,7 +6233,7 @@ gboolean dt_exif_xmp_write(const dt_imgid_t imgid,
     }
 
     // Initialize xmp data:
-    _exif_xmp_read_data(xmpData, imgid, "dt_exif_xmp_write");
+    _exif_xmp_read_data(xmpData, imgid, "dt_exif_xmp_write", reset_geometry);
 
     // Serialize the xmp data and output the xmp packet.
     if(Exiv2::XmpParser::encode(xmpPacket, xmpData,
@@ -6170,6 +6291,19 @@ gboolean dt_exif_xmp_write(const dt_imgid_t imgid,
     dt_control_log(_("cannot write XMP file '%s': '%s'"), filename, e.what());
     return TRUE;
   }
+}
+
+gboolean dt_exif_xmp_write(const dt_imgid_t imgid,
+                           const char *filename,
+                           const gboolean force_write)
+{
+  return _exif_xmp_write(imgid, filename, force_write, FALSE);
+}
+
+gboolean dt_exif_xmp_write_reset_geometry(const dt_imgid_t imgid,
+                                          const char *filename)
+{
+  return _exif_xmp_write(imgid, filename, TRUE, TRUE);
 }
 
 dt_colorspaces_color_profile_type_t dt_exif_get_color_space(const uint8_t *data,

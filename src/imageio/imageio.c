@@ -1334,10 +1334,13 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
            dt_check_gimpmode("file") ? " GIMP" : "");
 
   const int bpp = format->bpp(format_params);
+  // Raw writers need the pipeline geometry and metadata, but not its rendered RGB buffer.
+  const gboolean raw_export = !thumbnail_export
+    && (format->flags(format_params) & FORMAT_FLAGS_RAW_EXPORT);
 
   dt_get_perf_times(&start);
   const gboolean hq_process = high_quality_processing || scale > 1.0f;
-  if(hq_process)
+  if(!raw_export && hq_process)
   {
     /*
      * if high quality processing was requested, downsampling will be done
@@ -1346,7 +1349,7 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
     dt_dev_pixelpipe_process_no_gamma(&pipe, &dev, 0, 0,
                                       processed_width, processed_height, scale);
   }
-  else
+  else if(!raw_export)
   {
     // else, downsampling will be right after demosaic
 
@@ -1387,7 +1390,7 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
                   : "[dev_process_export] pixel pipeline processing");
 
   uint8_t *outbuf = pipe.backbuf;
-  if(outbuf == NULL)
+  if(!raw_export && outbuf == NULL)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "[dt_imageio_export_with_flags] no valid output buffer");

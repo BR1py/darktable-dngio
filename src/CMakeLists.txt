@@ -445,6 +445,19 @@ if(USE_LIBRAW)
     add_definitions(-DHAVE_LIBRAW=1)
     list(APPEND SOURCES "imageio/imageio_libraw.c")
   endif()
+
+  if(USE_DNGIO)
+    if(DONT_USE_INTERNAL_LIBRAW)
+      message(FATAL_ERROR "USE_DNGIO requires the bundled LibRaw")
+    endif()
+    if(NOT ADOBE_DNG_SDK_PATH)
+      message(FATAL_ERROR "USE_DNGIO requires ADOBE_DNG_SDK_PATH")
+    endif()
+    add_definitions(-DHAVE_ADOBE_DNG_SDK=1 -DqLinux=1 -DUNIX_ENV=1 -DqDNGUseLibJPEG=1
+                    -DqDNGUseXMP=0 -DqDNGXMPFiles=0 -DqDNGXMPDocOps=0)
+    include_directories(SYSTEM "${ADOBE_DNG_SDK_PATH}/source")
+    list(APPEND SOURCES "imageio/imageio_libraw_dngsdk.cc")
+  endif()
 endif()
 
 find_package(LensFun REQUIRED)
@@ -1144,6 +1157,8 @@ if(USE_LIBRAW AND NOT (DONT_USE_INTERNAL_LIBRAW AND libraw_FOUND))
   endif()
   set(ENABLE_LCMS OFF CACHE BOOL "")
   set(ENABLE_JASPER OFF CACHE BOOL "")
+  set(ENABLE_DNG_SDK ${USE_DNGIO} CACHE BOOL "" FORCE)
+  set(DNG_SDK_PATH "${ADOBE_DNG_SDK_PATH}" CACHE PATH "" FORCE)
 
   # LibRaw sub-module
   add_subdirectory(external/LibRaw-cmake)

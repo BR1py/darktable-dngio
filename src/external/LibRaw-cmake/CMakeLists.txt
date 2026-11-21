@@ -86,11 +86,14 @@ option(ENABLE_LCMS                 "Build library with LCMS support             
 option(ENABLE_JASPER               "Build library with libjasper support            (default=ON)"                 ON)
 option(ENABLE_EXAMPLES             "Build library with sample command-line programs (default=ON)"    ${MASTER_PROJECT})
 option(ENABLE_RAWSPEED             "Build library with extra RawSpeed codec support (default=OFF)"                OFF)
+option(ENABLE_DNG_SDK              "Build library with Adobe DNG SDK support (default=OFF)"                       OFF)
 option(ENABLE_DCRAW_DEBUG          "Build library with debug message from dcraw     (default=OFF)"                OFF)
 option(ENABLE_X3FTOOLS             "Build library with Foveon X3F support           (default=OFF)"                OFF)
 option(ENABLE_6BY9RPI              "Build library with Raspberry Pi RAW support     (default=OFF)"                OFF)
 option(LIBRAW_UNINSTALL_TARGET     "Add a custom target to ease removal of installed targets"        ${MASTER_PROJECT})
 option(LIBRAW_INSTALL              "Generate the install target."                                    ${MASTER_PROJECT})
+
+set(DNG_SDK_PATH "" CACHE PATH "Path containing the Adobe DNG SDK source directory")
 
 set(RAWSPEED_RPATH           "RawSpeed"           CACHE STRING
     "Relative path to extra RawSpeed codec     (default=RawSpeed)")
@@ -193,6 +196,28 @@ endif()
 
 # For registration to libraw_config.h
 MACRO_BOOL_TO_01(JPEG8_FOUND LIBRAW_USE_DNGLOSSYCODEC)
+
+# Adobe DNG SDK support. LibRaw needs only the image decoder, so XMP is
+# disabled. JPEG XL comes from the matching repository sources or a compatible installed build.
+set(DNG_SDK_SUPPORT_CAN_BE_COMPILED false)
+if(ENABLE_DNG_SDK)
+    if(NOT EXISTS "${DNG_SDK_PATH}/source/dng_host.h")
+        message(FATAL_ERROR "Adobe DNG SDK not found below DNG_SDK_PATH=${DNG_SDK_PATH}")
+    endif()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(DNG_JXL REQUIRED IMPORTED_TARGET libjxl>=0.11 libjxl_threads>=0.11)
+    file(GLOB dng_LIB_SRCS CONFIGURE_DEPENDS "${DNG_SDK_PATH}/source/*.cpp")
+    list(REMOVE_ITEM dng_LIB_SRCS
+         "${DNG_SDK_PATH}/source/dng_validate.cpp"
+         "${DNG_SDK_PATH}/source/dng_update_meta.cpp"
+         "${DNG_SDK_PATH}/source/dng_xmp.cpp"
+         "${DNG_SDK_PATH}/source/dng_xmp_sdk.cpp")
+    set_source_files_properties(${dng_LIB_SRCS} PROPERTIES COMPILE_FLAGS "-w")
+    add_definitions(-DUSE_DNGSDK -DqLinux=1 -DUNIX_ENV=1
+                    -DqDNGUseXMP=0 -DqDNGXMPFiles=0 -DqDNGXMPDocOps=0)
+    include_directories(SYSTEM "${DNG_SDK_PATH}/source")
+    set(DNG_SDK_SUPPORT_CAN_BE_COMPILED true)
+endif()
 
 # OpenMP check
 set(OPENMP_SUPPORT_CAN_BE_COMPILED false)
@@ -465,6 +490,10 @@ if(RAWSPEED_SUPPORT_CAN_BE_COMPILED)
     set(libraw_LIB_SRCS ${libraw_LIB_SRCS} ${librawspeed_LIB_SRCS})
 endif()
 
+if(DNG_SDK_SUPPORT_CAN_BE_COMPILED)
+    list(APPEND libraw_LIB_SRCS ${dng_LIB_SRCS})
+endif()
+
 
 add_library(raw STATIC ${libraw_LIB_SRCS})
 add_library(libraw::libraw ALIAS raw)
@@ -512,6 +541,10 @@ endif()
 
 if(JASPER_SUPPORT_CAN_BE_COMPILED)
     target_link_libraries(raw PUBLIC ${JASPER_LIBRARIES})
+endif()
+
+if(DNG_SDK_SUPPORT_CAN_BE_COMPILED)
+    target_link_libraries(raw PUBLIC PkgConfig::DNG_JXL)
 endif()
 
 if(RAWSPEED_SUPPORT_CAN_BE_COMPILED)
@@ -579,6 +612,10 @@ endif()
 
 if(JASPER_SUPPORT_CAN_BE_COMPILED)
     target_link_libraries(raw_r PUBLIC ${JASPER_LIBRARIES})
+endif()
+
+if(DNG_SDK_SUPPORT_CAN_BE_COMPILED)
+    target_link_libraries(raw_r PUBLIC PkgConfig::DNG_JXL)
 endif()
 
 if(RAWSPEED_SUPPORT_CAN_BE_COMPILED)

@@ -1428,7 +1428,7 @@ static int _ai_save_dng(lua_State *L)
     return luaL_error(L, "cannot access image %d", imgid);
   }
 
-  const int rc = dt_imageio_dng_write_cfa_bayer(path, cfa, W, H,
+  const int rc = dt_imageio_dng_write_cfa_mosaic(path, cfa, W, H,
                                                 img, exif_blob, exif_len,
                                                 NULL /* preview */);
   dt_image_cache_read_release(img);

@@ -66,6 +66,7 @@ typedef struct dt_lib_export_t
   GtkWidget *batch_treeview;
   GtkButton *export_button, *batch_export_button;
   GtkWidget *storage_extra_container, *format_extra_container;
+  GtkWidget *global_options;
   GtkWidget *high_quality;
   GtkWidget *export_masks;
   char *metadata_export;
@@ -810,6 +811,10 @@ static void set_format_by_name(dt_lib_export_t *d,
 
   // Let's also update combination of storage/format dimension restrictions
   _update_dimensions(d);
+
+  const gboolean show_global_options =
+    !(module->flags(NULL) & FORMAT_FLAGS_NO_GLOBAL_OPTIONS);
+  gtk_widget_set_visible(d->global_options, show_global_options);
 
   // only some modules support export of masks set it to 0 when
   // insensitive and restore when making it sensitive again. this
@@ -1683,16 +1688,19 @@ void gui_init(dt_lib_module_t *self)
                                  NULL,
                                  GDK_KEY_e, GDK_CONTROL_MASK));
 
+  d->global_options = dt_gui_vbox
+    (dt_ui_section_label_new(C_("section", "global options")),
+     d->dimensions_type, d->px_size, d->print_size, d->scale, d->size_in_px,
+     d->upscale, d->high_quality, d->export_masks,
+     d->profile, d->intent,
+     style_box, d->style_mode);
+
   self->widget = dt_gui_vbox
     (dt_ui_section_label_new(C_("section", "storage options")),
      d->storage, d->storage_extra_container,
      dt_ui_section_label_new(C_("section", "format options")),
      d->format, d->format_extra_container,
-     dt_ui_section_label_new(C_("section", "global options")),
-     d->dimensions_type, d->px_size, d->print_size, d->scale, d->size_in_px,
-     d->upscale, d->high_quality, d->export_masks,
-     d->profile, d->intent,
-     style_box, d->style_mode,
+     d->global_options,
      d->export_button);
 
   // multi-preset export

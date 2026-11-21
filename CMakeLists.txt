@@ -181,7 +181,13 @@ function(generate_version_gen_c)
   )
 endfunction(generate_version_gen_c)
 
-if(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
+if(EXISTS "${CMAKE_SOURCE_DIR}/DNGIO_VERSION")
+  file(STRINGS "${CMAKE_SOURCE_DIR}/DNGIO_VERSION" PROJECT_VERSION LIMIT_COUNT 1)
+  if(NOT USE_DNGIO)
+    string(REGEX REPLACE "-dngio-[0-9]+$" "" PROJECT_VERSION "${PROJECT_VERSION}")
+  endif()
+  generate_version_gen_c(${PROJECT_VERSION} "dngio configuration")
+elseif(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
   #project version is defined by -D on the cmake command line
   # only use that value, do not update it at make time
   generate_version_gen_c(${PROJECT_VERSION} "version override")

@@ -2982,6 +2982,62 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
+    <name>plugins/imageio/format/dng_jxl/target_version</name>
+    <type min="0" max="2">int</type>
+    <default>2</default>
+    <shortdescription>DNG target version</shortdescription>
+    <longdescription>0 DNG 1.1, 1 DNG 1.4, 2 DNG 1.7.1</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/dng_jxl/compression</name>
+    <type min="0" max="3">int</type>
+    <default>1</default>
+    <shortdescription>DNG raw compression mode</shortdescription>
+    <longdescription>0 uncompressed, 1 lossless, 2 lossy preserving the CFA mosaic, 3 lossy linear raw</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/dng_jxl/quality</name>
+    <type min="1" max="100">int</type>
+    <default>90</default>
+    <shortdescription>DNG lossy compression quality</shortdescription>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/dng_jxl/effort</name>
+    <type min="1" max="9">int</type>
+    <default>7</default>
+    <shortdescription>DNG JPEG XL encoding effort</shortdescription>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/dng_jxl/consider_crop</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>apply the current crop to DNG export</shortdescription>
+    <longdescription>map the crop back to an enclosing rectangle in the original sensor orientation</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/dng_jxl/crop_extension</name>
+    <type min="0" max="99">int</type>
+    <default>0</default>
+    <shortdescription>extend the DNG crop toward the full raw image</shortdescription>
+    <longdescription>0 exports only the crop; values approaching 100 progressively restore the surrounding raw image</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/dng_jxl/preview_size</name>
+    <type min="0" max="100">int</type>
+    <default>50</default>
+    <shortdescription>DNG preview size as percentage of the visible raw image</shortdescription>
+    <longdescription>0 embeds no preview; 100 uses the full visible raw dimensions</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/dng_jxl/clone_xmp</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>write a cloned XMP sidecar for exported DNG files</shortdescription>
+    <longdescription>preserve current darktable settings; masks and geometric operations are reset when the DNG crop option is active</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/imageio/format/webp/comp_type</name>
     <type min="0" max="1">int</type>
     <default>0</default>

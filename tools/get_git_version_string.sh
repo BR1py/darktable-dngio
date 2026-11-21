@@ -1,5 +1,12 @@
 #!/bin/sh
 
+# Keep the fork's release identity stable across Git and archive builds.
+VERSION_FILE="$(dirname "$0")/../DNGIO_VERSION"
+if [ -r "$VERSION_FILE" ]; then
+  cat "$VERSION_FILE"
+  exit 0
+fi
+
 VERSION="$(git describe --tags --dirty --match release-*)"
 
 if [ $? -eq 0 ] ;

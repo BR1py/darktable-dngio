@@ -327,28 +327,10 @@ static int _write_full_preview_subifd(TIFF *tif,
   return 0;
 }
 
-int dt_imageio_dng_write_cfa_bayer(const char *filename,
-                                   const uint16_t *cfa,
-                                   int width,
-                                   int height,
-                                   const dt_image_t *img,
-                                   const void *exif_blob,
-                                   int exif_len,
-                                   const dt_imageio_dng_preview_t *preview)
+static int _write_cfa_mosaic(TIFF *tif, const uint16_t *cfa, int width, int height,
+                              const dt_image_t *img,
+                              const dt_imageio_dng_preview_t *preview)
 {
-  if(!filename || !cfa || !img || width <= 0 || height <= 0)
-    return 1;
-
-  _install_dng_tiff_handlers();
-
-#ifdef _WIN32
-  wchar_t *wfilename = g_utf8_to_utf16(filename, -1, NULL, NULL, NULL);
-  TIFF *tif = TIFFOpenW(wfilename, "wl");
-  g_free(wfilename);
-#else
-  TIFF *tif = TIFFOpen(filename, "wl");
-#endif
-  if(!tif) return 1;
   _register_extra_dng_fields(tif);
 
   // canonical Adobe layout: IFD0=thumb, SubIFD0=raw, SubIFD1=full preview.
@@ -375,10 +357,9 @@ int dt_imageio_dng_write_cfa_bayer(const char *filename,
     if(_write_thumb_ifd0(tif, img, &ifd0, have_thumb ? 2 : 1) != 0)
     {
       dt_print(DT_DEBUG_ALWAYS,
-               "[imageio_dng] write_cfa_bayer: thumbnail IFD0 failed, aborting");
+               "[imageio_dng] write_cfa_mosaic: thumbnail IFD0 failed, aborting");
       g_free(thumb_jpeg);
       TIFFClose(tif);
-      g_unlink(filename);
       return 1;
     }
     // some libtiff builds drop merged field info on TIFFCreateDirectory,
@@ -410,15 +391,26 @@ int dt_imageio_dng_write_cfa_bayer(const char *filename,
   const int vis_h  = (img->p_height > 0 && img->p_height <= height - crop_y)
                      ? img->p_height : (height - crop_y);
 
-  // CFAPattern and BlackLevel are indexed from ActiveArea[0,0], so
-  // rotate per-site arrays when ActiveArea starts on an odd row/col
-  const int dy = crop_y & 1;
-  const int dx = crop_x & 1;
+  // CFAPattern is indexed from ActiveArea[0,0], so rotate the native
+  // sensor pattern to the visible origin. X-Trans retains its full 6x6
+  // mosaic instead of being converted to demosaicked LinearRaw data.
+  const int repeat = img->buf_dsc.filters == 9u ? 6 : 2;
+  const int dy = crop_y % repeat;
+  const int dx = crop_x % repeat;
 
-  const uint16_t cfa_repeat_dim[2] = { 2, 2 };
+  const uint16_t cfa_repeat_dim[2] = { repeat, repeat };
   TIFFSetField(tif, TIFFTAG_CFAREPEATPATTERNDIM, cfa_repeat_dim);
 
-  uint8_t cfa_pattern[4];
+  uint8_t cfa_pattern[36];
+  const int cfa_pattern_count = repeat * repeat;
+  if(repeat == 6)
+  {
+    for(int yy = 0; yy < 6; yy++)
+      for(int xx = 0; xx < 6; xx++)
+        cfa_pattern[yy * 6 + xx] =
+          img->buf_dsc.xtrans[(yy + dy) % 6][(xx + dx) % 6];
+  }
+  else
   {
     uint8_t native[4];
     _cfa_bytes_from_filters(img->buf_dsc.filters, native);
@@ -426,18 +418,22 @@ int dt_imageio_dng_write_cfa_bayer(const char *filename,
       for(int xx = 0; xx < 2; xx++)
         cfa_pattern[yy * 2 + xx] = native[((yy + dy) & 1) * 2 + ((xx + dx) & 1)];
   }
-  TIFFSetField(tif, TIFFTAG_CFAPATTERN, 4, cfa_pattern);
+  TIFFSetField(tif, TIFFTAG_CFAPATTERN, cfa_pattern_count, cfa_pattern);
 
   const uint8_t cfa_plane_color[3] = { 0, 1, 2 };   // R, G, B
   TIFFSetField(tif, TIFFTAG_CFAPLANECOLOR, 3, cfa_plane_color);
   TIFFSetField(tif, TIFFTAG_CFALAYOUT, (uint16_t)1); // rectangular
 
-  const uint16_t bl_repeat_dim[2] = { 2, 2 };
+  // Per-site black levels are represented by darktable's four-element
+  // array only for Bayer. Use the camera's scalar black for X-Trans.
+  const uint16_t bl_repeat_dim[2] = { repeat == 6 ? 1 : 2,
+                                      repeat == 6 ? 1 : 2 };
   TIFFSetField(tif, TIFFTAG_BLACKLEVELREPEATDIM, bl_repeat_dim);
 
   float black_level[4];
   const gboolean have_separate
-    = (img->raw_black_level_separate[0] != 0
+    = repeat == 2
+      && (img->raw_black_level_separate[0] != 0
        || img->raw_black_level_separate[1] != 0
        || img->raw_black_level_separate[2] != 0
        || img->raw_black_level_separate[3] != 0);
@@ -448,12 +444,16 @@ int dt_imageio_dng_write_cfa_bayer(const char *filename,
         black_level[yy * 2 + xx] =
           (float)img->raw_black_level_separate[((yy + dy) & 1) * 2 + ((xx + dx) & 1)];
   }
-  else
+  else if(repeat == 2)
   {
     for(int i = 0; i < 4; i++)
       black_level[i] = (float)img->raw_black_level;
   }
-  TIFFSetField(tif, TIFFTAG_BLACKLEVEL, 4, black_level);
+  else
+  {
+    black_level[0] = (float)img->raw_black_level;
+  }
+  TIFFSetField(tif, TIFFTAG_BLACKLEVEL, repeat == 6 ? 1 : 4, black_level);
 
   const uint32_t white = img->raw_white_point
     ? img->raw_white_point : 65535u;
@@ -503,6 +503,33 @@ int dt_imageio_dng_write_cfa_bayer(const char *filename,
   TIFFClose(tif);
   g_free(thumb_jpeg);
 
+  return res;
+}
+
+int dt_imageio_dng_write_cfa_mosaic(const char *filename,
+                                    const uint16_t *cfa,
+                                    int width,
+                                    int height,
+                                    const dt_image_t *img,
+                                    const void *exif_blob,
+                                    int exif_len,
+                                    const dt_imageio_dng_preview_t *preview)
+{
+  if(!filename || !cfa || !img || width <= 0 || height <= 0)
+    return 1;
+
+  _install_dng_tiff_handlers();
+
+#ifdef _WIN32
+  wchar_t *wfilename = g_utf8_to_utf16(filename, -1, NULL, NULL, NULL);
+  TIFF *tif = TIFFOpenW(wfilename, "wl");
+  g_free(wfilename);
+#else
+  TIFF *tif = TIFFOpen(filename, "wl");
+#endif
+  if(!tif) return 1;
+  const int res = _write_cfa_mosaic(tif, cfa, width, height, img, preview);
+
   // embed source EXIF (datetime, ISO, shutter, etc.)
   // dt_exif_write_blob takes a non-const pointer; we don't modify it
   if(res == 0 && exif_blob && exif_len > 0)
@@ -513,6 +540,76 @@ int dt_imageio_dng_write_cfa_bayer(const char *filename,
     g_unlink(filename);
 
   return res;
+}
+
+typedef struct dt_dng_memory_t
+{
+  GByteArray *bytes;
+  toff_t position;
+} dt_dng_memory_t;
+
+static tmsize_t _dng_memory_read(thandle_t handle, void *data, tmsize_t size)
+{
+  dt_dng_memory_t *memory = (dt_dng_memory_t *)handle;
+  if(size < 0 || memory->position > memory->bytes->len) return 0;
+  const tmsize_t count = MIN((toff_t)size, memory->bytes->len - memory->position);
+  memcpy(data, memory->bytes->data + memory->position, count);
+  memory->position += count;
+  return count;
+}
+
+static tmsize_t _dng_memory_write(thandle_t handle, void *data, tmsize_t size)
+{
+  dt_dng_memory_t *memory = (dt_dng_memory_t *)handle;
+  if(size < 0 || (toff_t)size > G_MAXUINT - memory->position) return -1;
+  const guint end = memory->position + size;
+  if(end > memory->bytes->len) g_byte_array_set_size(memory->bytes, end);
+  memcpy(memory->bytes->data + memory->position, data, size);
+  memory->position = end;
+  return size;
+}
+
+static toff_t _dng_memory_seek(thandle_t handle, toff_t offset, int whence)
+{
+  dt_dng_memory_t *memory = (dt_dng_memory_t *)handle;
+  const int64_t base = whence == SEEK_SET ? 0 : whence == SEEK_CUR
+    ? memory->position : whence == SEEK_END ? memory->bytes->len : -1;
+  const int64_t position = base + (int64_t)offset;
+  if(base < 0 || position < 0 || position > G_MAXUINT) return (toff_t)-1;
+  return memory->position = position;
+}
+
+static int _dng_memory_close(thandle_t handle) { return 0; }
+static toff_t _dng_memory_size(thandle_t handle)
+{
+  return ((dt_dng_memory_t *)handle)->bytes->len;
+}
+static int _dng_memory_map(thandle_t handle, void **data, toff_t *size) { return 0; }
+static void _dng_memory_unmap(thandle_t handle, void *data, toff_t size) {}
+
+GBytes *dt_imageio_dng_write_cfa_mosaic_memory(const uint16_t *cfa, int width, int height,
+                                              const dt_image_t *img,
+                                              const void *exif_blob, int exif_len)
+{
+  if(!cfa || !img || width <= 0 || height <= 0) return NULL;
+  _install_dng_tiff_handlers();
+  dt_dng_memory_t memory = { .bytes = g_byte_array_new(), .position = 0 };
+  TIFF *tif = TIFFClientOpen("DNG memory", "wl", (thandle_t)&memory,
+      _dng_memory_read, _dng_memory_write, _dng_memory_seek, _dng_memory_close,
+      _dng_memory_size, _dng_memory_map, _dng_memory_unmap);
+  if(!tif || _write_cfa_mosaic(tif, cfa, width, height, img, NULL) != 0)
+  {
+    g_byte_array_unref(memory.bytes);
+    return NULL;
+  }
+  if(exif_blob && exif_len > 0)
+  {
+    GBytes *result = dt_exif_write_blob_to_memory(memory.bytes->data, memory.bytes->len,
+                                                (uint8_t *)exif_blob, exif_len);
+    g_byte_array_unref(memory.bytes);
+    return result;
+  }
+  return g_byte_array_free_to_bytes(memory.bytes);
 }
 
 int dt_imageio_dng_write_linear(const char *filename,
@@ -539,7 +636,7 @@ int dt_imageio_dng_write_linear(const char *filename,
   if(!tif) return 1;
   _register_extra_dng_fields(tif);
 
-  // canonical layout when a preview is provided (see write_cfa_bayer)
+  // canonical layout when a preview is provided (see write_cfa_mosaic)
   const gboolean canonical = (preview && preview->data && preview->len > 0
                               && preview->width > 0 && preview->height > 0);
   uint8_t *thumb_jpeg = NULL;
@@ -568,7 +665,7 @@ int dt_imageio_dng_write_linear(const char *filename,
       g_unlink(filename);
       return 1;
     }
-    // see comment in write_cfa_bayer
+    // see comment in write_cfa_mosaic
     TIFFCreateDirectory(tif);
     _register_extra_dng_fields(tif);
   }

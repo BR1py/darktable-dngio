@@ -316,6 +316,20 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
 
     if(!r->isCFA)
     {
+#ifdef HAVE_ADOBE_DNG_SDK
+      // RawSpeed decodes LinearRaw DNG samples, but it does not implement all
+      // mandatory per-plane OpcodeList2 operations (notably MapPolynomial).
+      // Ignoring those operations changes the relative RGB channel levels.
+      // Let the Adobe DNG SDK handle LinearRaw DNGs while retaining RawSpeed's
+      // original path for camera sRAW and mosaiced DNG files.
+      const char *extension = g_strrstr(filename, ".");
+      if(extension && !g_ascii_strcasecmp(extension, ".dng"))
+      {
+        dt_print(DT_DEBUG_IMAGEIO,
+                 "[rawspeed_open] delegating LinearRaw DNG to Adobe DNG SDK");
+        return DT_IMAGEIO_UNSUPPORTED_FORMAT;
+      }
+#endif
       const dt_imageio_retval_t ret = dt_imageio_open_rawspeed_sraw(img, r, mbuf);
       return ret;
     }
@@ -436,6 +450,20 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
   catch(const rawspeed::RawDecoderException &exc)
   {
     const char *msg = exc.what();
+#ifdef HAVE_ADOBE_DNG_SDK
+    // RawSpeed drops DNG image chunks whose compression it cannot decode.
+    // JPEG XL (DNG 1.7) consequently reaches DngDecoder with an empty chunk
+    // list and throws "No RAW chunks found". This is an expected handoff to
+    // the Adobe DNG SDK, not evidence that the file is corrupt.
+    const char *extension = g_strrstr(filename, ".");
+    if(msg && strstr(msg, "No RAW chunks found")
+       && extension && !g_ascii_strcasecmp(extension, ".dng"))
+    {
+      dt_print(DT_DEBUG_IMAGEIO,
+               "[rawspeed_open] delegating unsupported DNG compression to Adobe DNG SDK");
+      return DT_IMAGEIO_UNSUPPORTED_FORMAT;
+    }
+#endif
     // FIXME FIXME
     // The following is a nasty hack which will break if exception messages change.
     // The proper way to handle this is to add two new exception types to Rawspeed and
