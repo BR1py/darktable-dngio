@@ -1,0 +1,137 @@
+--- a/source/dng_host.h
++++ b/source/dng_host.h
+@@ -340,6 +340,14 @@
+ 		/// Getter for flag determining whether to save a linear DNG file.	
+ 
+ 		virtual bool SaveLinearDNG (const dng_negative &negative) const;
++
++		/// Optional standard JPEG quality level (1..100) for lossy JPEG raw proxies.
++		/// A negative value selects the SDK's automatic quality.
++
++		virtual int32 LossyJPEGQuality () const
++			{
++			return -1;
++			}
+ 			
+ 		/// Getter for flag determining whether to save DNG with lossy
+ 		/// compressed mosaic if possible.
+--- a/source/dng_ifd.cpp
++++ b/source/dng_ifd.cpp
+@@ -193,6 +193,7 @@
+ 	,	fNextIFD (0)
+ 	
+ 	,	fCompressionQuality (-1)
++	,	fUseStandardJPEGQuality (false)
+ 	
+ 	,	fPatchFirstJPEGByte (false)
+ 
+--- a/source/dng_ifd.h
++++ b/source/dng_ifd.h
+@@ -241,6 +241,7 @@
+ 		uint64 fNextIFD;
+ 		
+ 		int32 fCompressionQuality;
++		bool fUseStandardJPEGQuality;
+ 
+ 		// For JPEG XL (compression type ccJXL), use fJXLEncodeSettings
+ 		// instead of fCompressionQuality.
+--- a/source/dng_image_writer.cpp
++++ b/source/dng_image_writer.cpp
+@@ -4757,7 +4757,22 @@
+ 
+ 				jpeg_set_defaults (&cinfo);
+ 				
+-				jpeg_set_adobe_quality (&cinfo, ifd.fCompressionQuality);
++				if (ifd.fUseStandardJPEGQuality)
++					{
++					jpeg_set_quality (&cinfo,
++								  Pin_int32 (1, ifd.fCompressionQuality, 100),
++								  TRUE);
++					// Raw RGB proxies must not lose chroma resolution.
++					for (int32 j = 0; j < cinfo.num_components; j++)
++						{
++						cinfo.comp_info [j].h_samp_factor = 1;
++						cinfo.comp_info [j].v_samp_factor = 1;
++						}
++					}
++				else
++					{
++					jpeg_set_adobe_quality (&cinfo, ifd.fCompressionQuality);
++					}
+ 				
+ 				// Write the JPEG header.
+ 				
+--- a/source/dng_jpeg_image.cpp
++++ b/source/dng_jpeg_image.cpp
+@@ -473,6 +473,14 @@
+ 		ifd.fCompressionQuality = useHigherQuality ? 10 : 8;
+ 		}
+ 
++	const int32 requestedQuality = host.LossyJPEGQuality ();
++
++	if (requestedQuality >= 0)
++		{
++		ifd.fCompressionQuality = Pin_int32 (1, requestedQuality, 100);
++		ifd.fUseStandardJPEGQuality = true;
++		}
++
+ 	EncodeTiles (host,
+ 				 writer,
+ 				 image,
+--- a/source/dng_jxl.cpp
++++ b/source/dng_jxl.cpp
+@@ -1537,6 +1537,7 @@
+ 			
+ 		// XMP.
+ 
++		#if qDNGUseXMP
+ 		if (includeXMP && metadata && metadata->GetXMP ())
+ 			{
+ 
+@@ -1574,6 +1575,7 @@
+ 				}
+ 
+ 			} // xmp
++		#endif
+ 
+ 		// IPTC.
+ 
+@@ -3833,6 +3835,7 @@
+ 
+ 	#endif	// qDNGValidate
+ 
++	#if qDNGUseXMP
+ 	if (fInfo)
+ 		{
+ 
+@@ -3873,6 +3876,7 @@
+ 			}
+ 
+ 		}
++	#endif
+ 	
+ 	}
+ 
+--- a/source/dng_negative.h
++++ b/source/dng_negative.h
+@@ -1283,6 +1283,20 @@
+ 				}
+ 				
+ 			}
++
++		// Replace the raw default crop when an application has physically
++		// rewritten or intentionally changed the raw image crop.
++
++		void SetRawDefaultCrop (uint32 originH,
++							uint32 originV,
++							uint32 sizeH,
++							uint32 sizeV)
++			{
++			fRawDefaultCropOriginH = dng_urational (originH, 1);
++			fRawDefaultCropOriginV = dng_urational (originV, 1);
++			fRawDefaultCropSizeH = dng_urational (sizeH, 1);
++			fRawDefaultCropSizeV = dng_urational (sizeV, 1);
++			}
+ 		
+ 		/// Getter for fRawDefaultCropSizeH.
+ 		

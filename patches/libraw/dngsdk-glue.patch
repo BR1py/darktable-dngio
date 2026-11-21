@@ -1,0 +1,156 @@
+diff --git a/src/integration/dngsdk_glue.cpp b/src/integration/dngsdk_glue.cpp
+index a67f9347..bb90d168 100644
+--- a/src/integration/dngsdk_glue.cpp
++++ b/src/integration/dngsdk_glue.cpp
+@@ -96,6 +96,38 @@ static dng_ifd* search_for_ifd(const dng_info& info, uint64 offset, ushort w, us
+     }
+     if (ret && (ret->fImageLength == h) && ret->fImageWidth == w)
+         return ret;
++
++    /*
++     * LibRaw normally identifies an IFD by the first strip/tile offset, while
++     * the DNG SDK keeps either that value or the location of the offset table,
++     * depending on the number and type of entries.  For heavily tiled JPEG XL
++     * DNGs (for example TinyDNG output) these representations need not match.
++     * The image dimensions already came from LibRaw's selected raw IFD, so use
++     * them as a conservative fallback when they identify exactly one JXL IFD.
++     */
++    dng_ifd *dimensionMatch = 0;
++    int dimensionIndex = -1;
++    for (int i = 0; i < info.fIFD.size(); i++)
++    {
++        dng_ifd *candidate = info.fIFD[i];
++        if (candidate && candidate->fCompression == ccJXL &&
++            candidate->fImageLength == h && candidate->fImageWidth == w)
++        {
++            if (dimensionMatch)
++            {
++                ifdIndex = -1;
++                return 0;
++            }
++            dimensionMatch = candidate;
++            dimensionIndex = i;
++        }
++    }
++    if (dimensionMatch)
++    {
++        ifdIndex = dimensionIndex;
++        return dimensionMatch;
++    }
++
+     ifdIndex = -1;
+     return 0;
+ }
+@@ -111,12 +143,7 @@ int LibRaw::valid_for_dngsdk()
+ 
+   if (libraw_internal_data.unpacker_data.tiff_compress == 52546) // regardless of flags or use_dngsdk value!
+   {
+-#ifdef qDNGSupportJXL
+-	  if (dngVersion_Current >= dngVersion_1_7_0_0)
+-		  return 1;
+-	  else
+-#endif
+-		  return 0; // Old DNG SDK
++	  return 1; // Adobe DNG SDK 1.7 or newer supports JPEG XL compression.
+   }
+ 
+ 
+@@ -351,6 +378,64 @@ int LibRaw::try_dngsdk()
+ 			return LIBRAW_DATA_ERROR;
+ 		}
+     }
++	/* Applying Stage 2/3 can replace the raw image and its bounds. In that
++	 * case the DNG SDK returns the mosaic in the CFA coordinate system from
++	 * the DNG, while LibRaw's filter word can still include the phase shift
++	 * from the original raw margins. Rebuild the filter word for the replaced
++	 * image only. A directly decoded lossless-JXL Stage 1 image retains those
++	 * margins, so resetting its phase here swaps red and blue and produces a
++	 * strong magenta cast. */
++	const dng_mosaic_info *mosaic = negative->GetMosaicInfo();
++	if (rawIFD->fCompression == ccJXL && (stageBits & 2) &&
++	    imgdata.idata.filters && mosaic &&
++	    mosaic->fCFAPatternSize.h == 2 &&
++	    mosaic->fCFAPatternSize.v == 2)
++	{
++		unsigned filters = 0;
++		for (int i = 15; i >= 0; i--)
++		{
++			const int index = i & 3;
++			filters = (filters << 2) |
++			          (mosaic->fCFAPattern[index >> 1][index & 1] & 3);
++		}
++		imgdata.idata.filters = filters;
++		/* rawdata.iparams is the public pre-processing snapshot used by
++		 * darktable for three-colour Bayer files. Keep it in sync with idata;
++		 * updating idata alone only affects LibRaw's later processing path. */
++		imgdata.rawdata.iparams.filters = filters;
++	}
++	/* The tiled-JXL IFD may have been selected by the dimension fallback
++	 * above. LibRaw's earlier offset-based metadata lookup then misses this
++	 * IFD and leaves the public black levels at zero. Restore the black-level
++	 * pattern from the exact SDK IFD for an unmodified Stage 1 image. Stage
++	 * 2/3 images are normalized below and intentionally use black level zero. */
++	if (rawIFD->fCompression == ccJXL && !(stageBits & 2) && mosaic)
++	{
++		double sums[4] = { 0.0, 0.0, 0.0, 0.0 };
++		unsigned counts[4] = { 0, 0, 0, 0 };
++		const uint32 rows = rawIFD->fBlackLevelRepeatRows;
++		const uint32 cols = rawIFD->fBlackLevelRepeatCols;
++		if (rows > 0 && rows <= kMaxBlackPattern &&
++		    cols > 0 && cols <= kMaxBlackPattern)
++		{
++			for (uint32 row = 0; row < rows; row++)
++				for (uint32 col = 0; col < cols; col++)
++				{
++					const unsigned color = mosaic->fCFAPattern
++						[row % mosaic->fCFAPatternSize.v]
++						[col % mosaic->fCFAPatternSize.h] & 3;
++					sums[color] += rawIFD->fBlackLevel[row][col][0];
++					counts[color]++;
++				}
++			imgdata.color.black = 0;
++			memset(imgdata.color.cblack, 0, sizeof(imgdata.color.cblack));
++			for (unsigned color = 0; color < 3; color++)
++				if (counts[color])
++					imgdata.color.cblack[color] =
++						(unsigned)(sums[color] / counts[color] + 0.5);
++			imgdata.color.cblack[3] = imgdata.color.cblack[1];
++		}
++	}
+ 	if (stageBits & 2)
+ 	{
+ 		if (stage2->Planes() > 1)
+@@ -373,17 +458,23 @@ int LibRaw::try_dngsdk()
+ 
+     int pixels = stage2->Bounds().H() * stage2->Bounds().W() * pplanes;
+ 
+-    if (ptype == ttShort && !(stageBits & 1) &&  !is_curve_linear())
+-    {
+-      imgdata.rawdata.raw_alloc = malloc(pixels * TagTypeSize(ptype));
+-      ushort *src = (ushort *)buffer.fData;
+-      ushort *dst = (ushort *)imgdata.rawdata.raw_alloc;
+-      for (int i = 0; i < pixels; i++)
+-        dst[i] = imgdata.color.curve[src[i]];
+-      S.raw_pitch = S.raw_width * pplanes * TagTypeSize(ptype);
++	/* dng_read_image has already decoded JXL into the sample values defined
++	 * by the DNG. Do not run those values through LibRaw's camera-specific
++	 * input curve a second time. Apart from no longer being lossless, that
++	 * changes the relative Bayer-channel levels and causes a magenta cast.
++	 * Other DNG compression paths retain the historical LibRaw behaviour. */
++	if (ptype == ttShort && rawIFD->fCompression != ccJXL &&
++	    !(stageBits & 1) && !is_curve_linear())
++	{
++	  imgdata.rawdata.raw_alloc = malloc(pixels * TagTypeSize(ptype));
++	  ushort *src = (ushort *)buffer.fData;
++	  ushort *dst = (ushort *)imgdata.rawdata.raw_alloc;
++	  for (int i = 0; i < pixels; i++)
++	    dst[i] = imgdata.color.curve[src[i]];
++	  S.raw_pitch = S.raw_width * pplanes * TagTypeSize(ptype);
+ 
+-    }
+-    else if (ptype == ttByte)
++	}
++	else if (ptype == ttByte)
+     {
+       imgdata.rawdata.raw_alloc = malloc(pixels * TagTypeSize(ttShort));
+       unsigned char *src = (unsigned char *)buffer.fData;
