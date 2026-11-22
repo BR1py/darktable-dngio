@@ -199,9 +199,12 @@ beyond the mathematically requested boundary.
 Write a darktable XMP sidecar next to the exported DNG. The sidecar is named
 `<exported-file>.dng.xmp`.
 
-With **consider crop** disabled, the current development history is cloned
-unchanged. This allows the exported raw file to reopen with the same darktable
-edit, subject to the usual module and version compatibility requirements.
+With **consider crop** disabled, development settings are cloned. For lossy
+exports, sensor black/white settings are rescaled to match the normalized DNG
+data; creative exposure settings remain unchanged. Sensor-level adjustments
+outside the normalized range cannot be cloned and cause a sidecar error,
+leaving the exported DNG on disk. Reopening remains subject to the usual module
+and version compatibility requirements and the chosen lossy compression.
 
 With **consider crop** enabled, the option is labelled **partly clone XMP
 sidecar**. Metadata and non-geometric development settings are retained, while
@@ -214,7 +217,20 @@ the following coordinate-dependent information is reset:
 
 Geometric modules are stored as disabled default instances. They remain
 visible in the darkroom and can be used to create new edits for the cropped
-DNG.
+DNG. Sensor black/white correction remains enabled; its crop margins are reset
+to match the newly stored sensor rectangle.
+
+### import to catalog
+
+Enable this option to add the completed DNG to darktable's catalog when using
+**file on disk** storage. It is disabled by default. The destination folder is
+registered as a film roll if needed, and the current image selection is retained.
+
+Import happens after the export and any cloned XMP sidecar have been written,
+so the imported image can use those editing settings. Failed exports are not
+imported. If catalog import fails, the exported file remains on disk and
+darktable reports the failure. Other storage targets do not import temporary
+export files.
 
 ## recommended settings
 

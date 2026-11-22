@@ -1,4 +1,4 @@
-# DNG import and export in 5.6.2-dngio-1
+# DNG import and export in 5.6.2-dngio.2
 
 This release extends darktable 5.6.2 with Adobe DNG SDK support for importing
 and exporting DNG files. Every supported DNG export mode can be imported again
@@ -70,6 +70,14 @@ reduce file size at the cost of encoding time.
   becomes **partly clone XMP sidecar**: masks and geometric operations are
   reset because the raw image coordinates have changed. Both sidecar options
   are off by default.
+  For lossy exports, sensor black/white settings are rescaled to the decoded
+  DNG range so they do not brighten the image a second time. Sensor-level
+  adjustments outside that range produce a sidecar error rather than being
+  silently clipped; the exported DNG remains on disk.
+- **Import to catalog** adds the exported DNG to darktable's catalog after a
+  successful **file on disk** export. It is off by default. If an XMP sidecar
+  is cloned, it is written before the file is imported, so darktable can read
+  those settings. Other storage targets do not import their temporary files.
 
 The default export is DNG 1.7.1 with lossless JPEG XL compression, a 50%
 preview, and cropping disabled.
