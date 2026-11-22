@@ -1,7 +1,7 @@
 name: dngio
 on:
   push:
-    branches: [master, 'dngio-*']
+    branches: [master, 'dngio-*', '*-dngio.*-dev']
   pull_request:
   workflow_dispatch:
 permissions:
