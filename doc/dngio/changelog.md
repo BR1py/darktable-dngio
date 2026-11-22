@@ -5,6 +5,9 @@ Changes to this fork, based on darktable 5.6.2. See the
 
 ## 5.6.2-dngio.2 — local development build
 
+- Documented command-line DNG export in the feature guide, including AppImage
+  usage, compression settings, XMP cloning, cropping, persistent catalog import,
+  and whole-folder conversion with Bash platform requirements.
 - Added **import to catalog** to DNG export, disabled by default. Successful
   **file on disk** exports can be imported automatically after their XMP
   sidecars are written, while retaining the current image selection.

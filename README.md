@@ -13,6 +13,8 @@ See [DNG import and export features](doc/dngio/features.md) for supported format
 
 Build instructions for this fork: [build, test, and AppImage packaging](doc/dngio/build.md).
 
+For scripted conversion, see [DNG export from the command line](doc/dngio/features.md#dng-export-from-the-command-line), including a [whole-folder conversion example for Bash on Linux](doc/dngio/features.md#convert-a-whole-folder-of-raw-files).
+
 For this fork's Adobe DNG SDK integration, see [Licensing and third-party notices](LICENSING.md), including the SDK agreement, DNG attribution, and distribution requirements.
 
 ![screenshot_lighttable](https://user-images.githubusercontent.com/45535283/148689197-e53dd75f-32f1-4297-9a0f-a9547fd4e7c7.jpg)
