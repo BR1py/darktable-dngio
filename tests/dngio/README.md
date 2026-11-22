@@ -13,8 +13,8 @@ instead of stored reference renders.
 ## Configure and run
 
 Requirements: darktable's normal build dependencies, cmocka (required by DT
-when enabling tests), Python 3, ExifTool, and the local image fixtures. No
-additional Python packages are needed. Configure the build with bundled LibRaw
+when enabling tests), Python 3, Pillow (`python3-pil` on Debian/Ubuntu),
+ExifTool, and the local image fixtures. Configure the build with bundled LibRaw
 and the Adobe SDK enabled, using the SDK path appropriate to your checkout.
 
 From the DT source directory, use the [repository build helper](../../doc/dngio/build.md):
@@ -49,6 +49,8 @@ required fixtures fail the image tests.
 | CTest case | Assertions |
 | --- | --- |
 | `dngio.cli` | The selected executable starts and reports the release specified by `DNGIO_VERSION`. |
+| `dngio.import_to_catalog` | Persistent-library checks verify the default-off behavior, successful DNG transcoding and cropped/camera-raw imports, and no catalog entry after failed export. |
+| `dngio.cloned_xmp_brightness` | Rendered brightness survives cloned-XMP re-import for DNG and camera raw inputs, lossless and both lossy modes, with and without cropping. Custom sensor levels and exposure edits are retained. |
 | `dngio.fixture_privacy` | Approved fixture checksums match and metadata contains no personal names, nonzero serials, or private paths. |
 | `dngio.import_fixtures` | All DNG, ARW, and ORF files in `fixtures/` render into nonempty PNGs of the requested dimensions. This includes the restored lossy mosaic DNG. |
 | `dngio.lossless_roundtrip` | TEST2 and TEST6 survive JPEG XL lossless transcoding with identical decoded 16-bit CFA samples and geometry, retained calibration metadata, and successful re-import. |

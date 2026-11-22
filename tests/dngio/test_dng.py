@@ -3,6 +3,7 @@
 import json
 import hashlib
 import os
+import sqlite3
 from pathlib import Path
 import struct
 import subprocess
@@ -80,7 +81,8 @@ class DngTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)[0]
 
-    def export(self, source, name, target=2, compression=1, xmp=None, succeeds=True, **settings):
+    def export(self, source, name, target=2, compression=1, xmp=None, succeeds=True,
+               library=None, **settings):
         self.counter += 1
         job = self.work / str(self.counter)
         job.mkdir()
@@ -89,6 +91,8 @@ class DngTests(unittest.TestCase):
         if xmp:
             command.append(str(xmp))
         command += [str(output)]
+        if library is not None:
+            command += ["--library", str(library)]
         if output.suffix == ".png":
             command += ["--width", "256", "--height", "256"]
         command += ["--core", "--configdir", str(job / "config"), "--cachedir", str(job / "cache"),
@@ -108,6 +112,74 @@ class DngTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0, log)
             self.assertFalse(output.exists(), log)
         return output, log
+
+    def test_import_to_catalog(self):
+        for enabled, crop, source in ((False, False, "TEST6.dng"),
+                                      (True, False, "TEST6.dng"),
+                                      (True, True, "TEST6.dng"),
+                                      (True, False, "TEST1.ARW")):
+            with self.subTest(enabled=enabled, crop=crop, source=source):
+                library = self.work / f"library-{self.counter}.db"
+                output, _ = self.export(self.fixture(source), "catalog.dng", library=library,
+                                        import_to_catalog=str(enabled).lower(),
+                                        consider_crop=str(crop).lower(), clone_xmp="true")
+                with sqlite3.connect(library) as db:
+                    rows = db.execute("SELECT images.filename FROM images JOIN film_rolls "
+                                      "ON images.film_id = film_rolls.id WHERE film_rolls.folder = ?",
+                                      (str(output.parent),)).fetchall()
+                self.assertEqual(rows, [(output.name,)] if enabled else [])
+
+        library = self.work / "failed.db"
+        output, _ = self.export(self.fixture("TEST6.dng"), "failed.dng", target=0,
+                                compression=2, succeeds=False, library=library,
+                                import_to_catalog="true")
+        with sqlite3.connect(library) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM images WHERE filename = ?",
+                                        (output.name,)).fetchone()[0], 0)
+
+    def test_cloned_xmp_brightness(self):
+        from PIL import Image, ImageStat
+
+        def mean(path):
+            with Image.open(path) as image:
+                return sum(ImageStat.Stat(image.convert("RGB")).mean) / 3
+
+        for name in ("TEST6.dng", "TEST1.ARW"):
+            source = self.fixture(name)
+            before, _ = self.export(source, "before.png")
+            reference = mean(before)
+            for mode, crop in ((1, False), (2, False), (3, False),
+                               (1, True), (2, True), (3, True)):
+                with self.subTest(source=name, mode=mode, crop=crop):
+                    output, _ = self.export(source, "edited.dng", compression=mode,
+                                            clone_xmp="true", consider_crop=str(crop).lower())
+                    after, _ = self.export(output, "after.png", xmp=Path(str(output) + ".xmp"))
+                    self.assertAlmostEqual(mean(after) / reference, 1.0, delta=0.02)
+
+        # A deliberate sensor-level edit must be rescaled, not reset to defaults.
+        params = struct.pack("<4i5H2x", 0, 0, 0, 0, 600, 600, 600, 600, 10000).hex()
+        exposure = struct.pack("<i4f2i", 0, 0.0, 1.0, 50.0, -4.0, 0, 1).hex()
+        xmp = self.work / "levels.xmp"
+        xmp.write_text(f'''<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description xmlns:darktable="http://darktable.sf.net/" darktable:xmp_version="5"
+ darktable:history_end="2" darktable:iop_order_version="4">
+<darktable:history><rdf:Seq><rdf:li darktable:num="0" darktable:operation="rawprepare"
+ darktable:enabled="1" darktable:modversion="1" darktable:params="{params}"
+ darktable:multi_priority="0" darktable:multi_name=""/>
+<rdf:li darktable:num="1" darktable:operation="exposure"
+ darktable:enabled="1" darktable:modversion="7" darktable:params="{exposure}"
+ darktable:multi_priority="0" darktable:multi_name=""/>
+</rdf:Seq></darktable:history></rdf:Description></rdf:RDF></x:xmpmeta>''')
+        source = self.fixture("TEST6.dng")
+        before, _ = self.export(source, "custom-before.png", xmp=xmp)
+        output, _ = self.export(source, "custom.dng", xmp=xmp, compression=2, clone_xmp="true")
+        after, _ = self.export(output, "custom-after.png", xmp=Path(str(output) + ".xmp"))
+        self.assertAlmostEqual(mean(after) / mean(before), 1.0, delta=0.02)
+        ns = "{http://darktable.sf.net/}"
+        copied_exposure = [entry for entry in ET.parse(str(output) + ".xmp").iter()
+                           if entry.get(ns + "operation") == "exposure"]
+        self.assertTrue(any(entry.get(ns + "params") == exposure for entry in copied_exposure))
 
     def test_import_fixtures(self):
         for name in ("TEST1.ARW", "TEST2.dng", "TEST2_loss_dng_converter.dng",

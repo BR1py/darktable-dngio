@@ -23,6 +23,7 @@ apt-get install --yes --no-install-recommends \
   cmake \
   libcmocka-dev \
   exiftool \
+  python3-pil \
   git-lfs \
   desktop-file-utils \
   gettext \

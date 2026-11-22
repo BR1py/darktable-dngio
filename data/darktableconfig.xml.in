@@ -3031,6 +3031,13 @@
     <longdescription>0 embeds no preview; 100 uses the full visible raw dimensions</longdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/imageio/format/dng_jxl/import_to_catalog</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>import exported DNG into the catalog</shortdescription>
+    <longdescription>add successfully exported DNG files to the catalog when using file on disk storage</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/imageio/format/dng_jxl/clone_xmp</name>
     <type>bool</type>
     <default>false</default>

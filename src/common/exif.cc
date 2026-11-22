@@ -37,6 +37,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 // avoid error reported when including exiv2.hpp on macOS (XCode 15.2)
 #pragma GCC diagnostic push
@@ -4728,7 +4729,8 @@ gboolean dt_exif_xmp_read(dt_image_t *img,
 static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
                                 const dt_imgid_t imgid,
                                 int history_end,
-                                const gboolean reset_geometry = FALSE)
+                                const gboolean reset_geometry = FALSE,
+                                const dt_image_t *normalized_raw = nullptr)
 {
   sqlite3_stmt *stmt;
 
@@ -4850,7 +4852,9 @@ static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
     const dt_iop_module_so_t *module_so = reset_geometry
                                          ? dt_iop_get_module_so(operation)
                                          : NULL;
-    const gboolean reset_module = reset_geometry
+    const gboolean rawprepare = !strcmp(operation, "rawprepare");
+    const gboolean adapt_raw = rawprepare && (reset_geometry || normalized_raw);
+    const gboolean reset_module = reset_geometry && !rawprepare
       && ((module_so && (module_so->operation_tags() & IOP_TAG_DISTORT))
           || !strcmp(operation, "spots") || !strcmp(operation, "retouch"));
     if(reset_module)
@@ -4859,9 +4863,66 @@ static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
       g_hash_table_add(reset_operations, g_strdup(operation));
     }
 
+    std::vector<unsigned char> adapted;
+    int serialized_version = modversion;
+    if(adapt_raw)
+    {
+      if(reset_geometry) g_hash_table_add(reset_operations, g_strdup(operation));
+      if(params_len > 0)
+      {
+        const dt_iop_module_so_t *raw_so = dt_iop_get_module_so("rawprepare");
+        if(!raw_so)
+          throw Exiv2::Error(Exiv2::ErrorCode::kerErrorMessage,
+                             "raw black/white module unavailable for DNG");
+        if(modversion == raw_so->version())
+          adapted.assign((const unsigned char *)params_blob,
+                         (const unsigned char *)params_blob + params_len);
+        else
+        {
+          void *converted = nullptr;
+          int32_t converted_size = 0;
+          // Rawprepare v1 predates the flat-field member; its converter needs no module instance.
+          if(modversion != 1 || params_len != (int)raw_so->get_f("flat_field")->header.offset
+             || raw_so->legacy_params(nullptr, params_blob, modversion, &converted,
+                                       &converted_size, &serialized_version))
+            throw Exiv2::Error(Exiv2::ErrorCode::kerErrorMessage,
+                               "cannot adapt legacy raw black/white settings for DNG");
+          adapted.assign((unsigned char *)converted, (unsigned char *)converted + converted_size);
+          free(converted);
+        }
+        if(serialized_version != raw_so->version()
+           || adapted.size() != raw_so->get_introspection()->field->header.size)
+          throw Exiv2::Error(Exiv2::ErrorCode::kerErrorMessage, "invalid raw black/white settings for DNG");
+        if(reset_geometry)
+        {
+          for(const char *field : {"left", "top", "right", "bottom", "flat_field"})
+            memset(raw_so->get_p(adapted.data(), field), 0, raw_so->get_f(field)->header.size);
+        }
+        if(normalized_raw)
+        {
+          auto *black = (uint16_t *)raw_so->get_p(adapted.data(), "raw_black_level_separate");
+          auto *white = (uint16_t *)raw_so->get_p(adapted.data(), "raw_white_point");
+          double mean_black = 0.0;
+          for(int c = 0; c < 4; c++) mean_black += normalized_raw->raw_black_level_separate[c] / 4.0;
+          auto map_level = [&](const double value, const double base) -> uint16_t
+          {
+            const double range = normalized_raw->raw_white_point - base;
+            const double mapped = range > 0 ? 65535.0 * (value - base) / range : NAN;
+            if(!std::isfinite(mapped) || mapped < -0.5 || mapped > 65535.5)
+              throw Exiv2::Error(Exiv2::ErrorCode::kerErrorMessage,
+                                 "raw black/white adjustments exceed the normalized DNG range");
+            return (uint16_t)CLAMP(std::round(mapped), 0.0, 65535.0);
+          };
+          *white = map_level(*white, mean_black);
+          for(int c = 0; c < 4; c++)
+            black[c] = map_level(black[c], normalized_raw->raw_black_level_separate[c]);
+        }
+      }
+    }
     char *params = reset_module
       ? strdup("")
-      : dt_exif_xmp_encode((const unsigned char *)params_blob, params_len, NULL);
+      : dt_exif_xmp_encode(adapted.empty() ? (const unsigned char *)params_blob : adapted.data(),
+                           adapted.empty() ? params_len : (int)adapted.size(), NULL);
 
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:num", num);
@@ -4871,10 +4932,10 @@ static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
     xmpData[key] = operation;
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:enabled", num);
-    xmpData[key] = reset_module ? 0 : enabled;
+    xmpData[key] = adapt_raw ? 1 : reset_module ? 0 : enabled;
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:modversion", num);
-    xmpData[key] = modversion;
+    xmpData[key] = serialized_version;
     snprintf(key, sizeof(key),
              "Xmp.darktable.history[%d]/darktable:params", num);
     xmpData[key] = params;
@@ -4945,7 +5006,7 @@ static void _set_xmp_dt_history(Exiv2::XmpData &xmpData,
       xmpData[key] = module_so->op;
       snprintf(key, sizeof(key),
                "Xmp.darktable.history[%d]/darktable:enabled", num);
-      xmpData[key] = 0;
+      xmpData[key] = !strcmp(module_so->op, "rawprepare") ? 1 : 0;
       snprintf(key, sizeof(key),
                "Xmp.darktable.history[%d]/darktable:modversion", num);
       xmpData[key] = module_so->version();
@@ -5243,7 +5304,8 @@ static void _set_xmp_dt_metadata(Exiv2::XmpData &xmpData,
 static void _exif_xmp_read_data(Exiv2::XmpData &xmpData,
                                 const dt_imgid_t imgid,
                                 const char *info,
-                                const gboolean reset_geometry = FALSE)
+                                const gboolean reset_geometry = FALSE,
+                                const dt_image_t *normalized_raw = nullptr)
 {
   const double start = dt_get_debug_wtime();
   const int xmp_version = DT_XMP_EXIF_VERSION;
@@ -5346,7 +5408,7 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData,
     xmpData["Xmp.darktable.auto_presets_applied"] = 1;
   else
     xmpData["Xmp.darktable.auto_presets_applied"] = 0;
-  _set_xmp_dt_history(xmpData, imgid, history_end, reset_geometry);
+  _set_xmp_dt_history(xmpData, imgid, history_end, reset_geometry, normalized_raw);
 
   // We need to read the iop-order list
   xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
@@ -5356,9 +5418,9 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData,
   sqlite3_finalize(stmt);
   g_free(iop_order_list);
 
-  // A remapped crop changes the serialized history. Leave hashes out so the
+  // Adapted sensor levels or crop change the serialized history. Leave hashes out so the
   // importer derives fresh values from that adapted history.
-  if(!reset_geometry)
+  if(!reset_geometry && !normalized_raw)
   {
     dt_history_hash_values_t hash;
     dt_history_hash_read(imgid, &hash);
@@ -6182,7 +6244,8 @@ gboolean dt_exif_xmp_attach_export(const dt_imgid_t imgid,
 static gboolean _exif_xmp_write(const dt_imgid_t imgid,
                                 const char *filename,
                                 const gboolean force_write,
-                                const gboolean reset_geometry)
+                                const gboolean reset_geometry,
+                                const dt_image_t *normalized_raw = nullptr)
 {
   // Refuse to write sidecar for non-existent image:
   char imgfname[PATH_MAX] = { 0 };
@@ -6233,7 +6296,7 @@ static gboolean _exif_xmp_write(const dt_imgid_t imgid,
     }
 
     // Initialize xmp data:
-    _exif_xmp_read_data(xmpData, imgid, "dt_exif_xmp_write", reset_geometry);
+    _exif_xmp_read_data(xmpData, imgid, "dt_exif_xmp_write", reset_geometry, normalized_raw);
 
     // Serialize the xmp data and output the xmp packet.
     if(Exiv2::XmpParser::encode(xmpPacket, xmpData,
@@ -6298,6 +6361,12 @@ gboolean dt_exif_xmp_write(const dt_imgid_t imgid,
                            const gboolean force_write)
 {
   return _exif_xmp_write(imgid, filename, force_write, FALSE);
+}
+
+gboolean dt_exif_xmp_write_dng(const dt_imgid_t imgid, const char *filename,
+                               const gboolean reset_geometry, const dt_image_t *normalized_raw)
+{
+  return _exif_xmp_write(imgid, filename, TRUE, reset_geometry, normalized_raw);
 }
 
 gboolean dt_exif_xmp_write_reset_geometry(const dt_imgid_t imgid,

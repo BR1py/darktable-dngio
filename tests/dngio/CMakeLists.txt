@@ -6,7 +6,7 @@ add_test(NAME dngio.cli
     ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/test_cli.py" -v)
 set_tests_properties(dngio.cli PROPERTIES LABELS "dngio;integration" TIMEOUT 60)
 
-foreach(case fixture_privacy import_fixtures lossless_roundtrip camera_raw_conversion preview_and_threading compression_and_versions crop_and_xmp reject_invalid_exports)
+foreach(case fixture_privacy import_fixtures lossless_roundtrip camera_raw_conversion preview_and_threading compression_and_versions crop_and_xmp reject_invalid_exports import_to_catalog cloned_xmp_brightness)
   add_test(NAME dngio.${case}
     COMMAND ${CMAKE_COMMAND} -E env
       "DARKTABLE_CLI=$<TARGET_FILE:darktable-cli>"

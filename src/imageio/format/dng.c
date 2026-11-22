@@ -23,7 +23,7 @@
 #include <math.h>
 #include <unistd.h>
 
-DT_MODULE(1)
+DT_MODULE(2)
 
 typedef enum dt_dng_target_version_t
 {
@@ -51,6 +51,7 @@ typedef struct dt_imageio_dng_jxl_t
   int crop_extension;
   int preview_size;
   int clone_xmp;
+  int import_to_catalog;
 } dt_imageio_dng_jxl_t;
 
 typedef struct dt_imageio_dng_jxl_gui_t
@@ -64,6 +65,7 @@ typedef struct dt_imageio_dng_jxl_gui_t
   GtkWidget *preview_size;
   GtkWidget *clone_xmp;
   GtkWidget *clone_xmp_partial;
+  GtkWidget *import_to_catalog;
   gboolean updating_gui;
 } dt_imageio_dng_jxl_gui_t;
 
@@ -97,7 +99,9 @@ int bpp(dt_imageio_module_data_t *data)
 
 int flags(dt_imageio_module_data_t *data)
 {
-  return FORMAT_FLAGS_NO_GLOBAL_OPTIONS | FORMAT_FLAGS_RAW_EXPORT;
+  const dt_imageio_dng_jxl_t *params = (const dt_imageio_dng_jxl_t *)data;
+  return FORMAT_FLAGS_NO_GLOBAL_OPTIONS | FORMAT_FLAGS_RAW_EXPORT
+    | (params && params->import_to_catalog ? FORMAT_FLAGS_IMPORT_TO_CATALOG : 0);
 }
 
 size_t params_size(dt_imageio_module_format_t *self)
@@ -112,6 +116,15 @@ void *legacy_params(dt_imageio_module_format_t *self,
                     int *new_version,
                     size_t *new_size)
 {
+  if(old_version == 1
+     && old_params_size == G_STRUCT_OFFSET(dt_imageio_dng_jxl_t, import_to_catalog))
+  {
+    dt_imageio_dng_jxl_t *params = g_malloc0(sizeof(*params));
+    memcpy(params, old_params, old_params_size);
+    *new_version = 2;
+    *new_size = sizeof(*params);
+    return params;
+  }
   return NULL;
 }
 
@@ -127,6 +140,7 @@ void *get_params(dt_imageio_module_format_t *self)
   d->crop_extension = dt_conf_get_int("plugins/imageio/format/dng_jxl/crop_extension");
   d->preview_size = dt_conf_get_int("plugins/imageio/format/dng_jxl/preview_size");
   d->clone_xmp = dt_conf_get_bool("plugins/imageio/format/dng_jxl/clone_xmp");
+  d->import_to_catalog = dt_conf_get_bool("plugins/imageio/format/dng_jxl/import_to_catalog");
   return d;
 }
 
@@ -205,6 +219,7 @@ int set_params(dt_imageio_module_format_t *self, const void *params, const int s
   dt_bauhaus_slider_set(g->preview_size, d->preview_size);
   dt_bauhaus_combobox_set(g->clone_xmp, d->clone_xmp != 0);
   dt_bauhaus_combobox_set(g->clone_xmp_partial, d->clone_xmp != 0);
+  dt_bauhaus_combobox_set(g->import_to_catalog, d->import_to_catalog != 0);
   _update_lossy_controls(g, d->target_version, d->compression);
   gtk_widget_set_visible(g->crop_extension, d->consider_crop != 0);
   gtk_widget_set_visible(g->clone_xmp, d->consider_crop == 0);
@@ -282,12 +297,21 @@ static gboolean _crop_bounds_from_pipe(dt_dev_pixelpipe_t *pipe,
 }
 
 static int _write_cloned_xmp(const char *filename, const dt_imgid_t imgid,
-                             const gboolean reset_geometry)
+                             const gboolean reset_geometry, const int compression)
 {
   char *xmpfile = g_strconcat(filename, ".xmp", NULL);
-  const gboolean error = reset_geometry
-    ? dt_exif_xmp_write_reset_geometry(imgid, xmpfile)
-    : dt_exif_xmp_write(imgid, xmpfile, TRUE);
+  dt_image_t source;
+  const gboolean normalized = compression == DT_DNG_LOSSY_MOSAIC
+                              || compression == DT_DNG_LOSSY_LINEAR;
+  if(normalized)
+  {
+    const dt_image_t *cached = dt_image_cache_get(imgid, 'r');
+    if(!cached) { g_free(xmpfile); return 1; }
+    source = *cached;
+    dt_image_cache_read_release(cached);
+  }
+  const gboolean error = dt_exif_xmp_write_dng(imgid, xmpfile, reset_geometry,
+                                              normalized ? &source : NULL);
   if(error)
   {
     g_unlink(xmpfile);
@@ -336,7 +360,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename,
       dt_control_log(_("DNG export: Adobe DNG transcoding failed"));
     }
     else if(params->clone_xmp)
-      result = _write_cloned_xmp(filename, imgid, FALSE);
+      result = _write_cloned_xmp(filename, imgid, FALSE, compression);
     return result;
   }
 
@@ -450,7 +474,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename,
     dt_control_log(_("DNG export: Adobe DNG compression failed"));
   }
   else if(params->clone_xmp)
-    result = _write_cloned_xmp(filename, imgid, params->consider_crop);
+    result = _write_cloned_xmp(filename, imgid, params->consider_crop, compression);
   return result;
 }
 
@@ -494,6 +518,12 @@ static void _preview_size_changed(GtkWidget *widget, gpointer user_data)
 {
   dt_conf_set_int("plugins/imageio/format/dng_jxl/preview_size",
                   (int)dt_bauhaus_slider_get(widget));
+}
+
+static void _import_to_catalog_changed(GtkWidget *widget, gpointer user_data)
+{
+  dt_conf_set_bool("plugins/imageio/format/dng_jxl/import_to_catalog",
+                   dt_bauhaus_combobox_get(widget) != 0);
 }
 
 static void _clone_xmp_changed(GtkWidget *widget, gpointer user_data)
@@ -617,11 +647,17 @@ void gui_init(dt_imageio_module_format_t *self)
   gtk_widget_set_no_show_all(g->clone_xmp_partial, TRUE);
   gtk_widget_set_visible(g->clone_xmp_partial, consider_crop);
 
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(
+      g->import_to_catalog, self, NULL, N_("import to catalog"),
+      _("add the completed DNG to the catalog when exporting to file on disk"),
+      dt_conf_get_bool("plugins/imageio/format/dng_jxl/import_to_catalog") ? 1 : 0,
+      _import_to_catalog_changed, NULL, N_("no"), N_("yes"));
+
   self->widget = dt_gui_vbox(g->target_version, g->compression,
                              g->quality, g->effort,
                              g->preview_size, g->consider_crop,
                              g->crop_extension, g->clone_xmp,
-                             g->clone_xmp_partial);
+                             g->clone_xmp_partial, g->import_to_catalog);
 }
 
 void gui_cleanup(dt_imageio_module_format_t *self)
@@ -641,6 +677,7 @@ void gui_reset(dt_imageio_module_format_t *self)
   dt_bauhaus_slider_set(g->preview_size, 50);
   dt_bauhaus_combobox_set(g->clone_xmp, 0);
   dt_bauhaus_combobox_set(g->clone_xmp_partial, 0);
+  dt_bauhaus_combobox_set(g->import_to_catalog, 0);
 }
 
 void init(dt_imageio_module_format_t *self)
@@ -662,6 +699,8 @@ void init(dt_imageio_module_format_t *self)
                                 dt_imageio_dng_jxl_t, preview_size, int);
   dt_lua_register_module_member(darktable.lua_state.state, self,
                                 dt_imageio_dng_jxl_t, clone_xmp, int);
+  dt_lua_register_module_member(darktable.lua_state.state, self,
+                                dt_imageio_dng_jxl_t, import_to_catalog, int);
 #endif
 }
 

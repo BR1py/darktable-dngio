@@ -20,6 +20,7 @@
 #include "common/darktable.h"
 #include "common/datetime.h"
 #include "common/exif.h"
+#include "common/film.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/metadata.h"
@@ -537,6 +538,32 @@ try_again:
              filename);
     dt_control_log(_("could not export to file `%s'!"), filename);
     return 1;
+  }
+
+  if(format->flags(fdata) & FORMAT_FLAGS_IMPORT_TO_CATALOG)
+  {
+    char *directory = g_path_get_dirname(filename);
+    dt_film_t film;
+    dt_film_init(&film);
+    // Parallel exports may create the same destination film roll.
+    dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+    const dt_filmid_t filmid = dt_film_new(&film, directory);
+    dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+    // Import sidecars without clearing the user's current image selection.
+    const dt_imgid_t imported = dt_is_valid_filmid(filmid)
+      ? dt_image_import(filmid, filename, TRUE, FALSE) : NO_IMGID;
+    dt_film_cleanup(&film);
+    g_free(directory);
+    if(!dt_is_valid_imgid(imported))
+    {
+      dt_control_log(_("exported file `%s', but could not import it to the catalog"), filename);
+      return 1;
+    }
+    if(darktable.gui)
+    {
+      DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_IMAGE_IMPORT, imported);
+      DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_FILMROLLS_IMPORTED, filmid);
+    }
   }
 
   dt_print(DT_DEBUG_ALWAYS, "[export_job] exported to `%s'", filename);

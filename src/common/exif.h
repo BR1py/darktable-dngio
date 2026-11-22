@@ -107,6 +107,10 @@ gboolean dt_exif_xmp_write(const dt_imgid_t imgid, const char *filename, const g
 /** Write a sidecar for a physically cropped raw export. Masks and geometric
  * operations are reset because their original coordinate system no longer
  * exists. Returns TRUE in case of errors. */
+/** Clone DNG history with output sensor geometry and normalized raw levels. */
+gboolean dt_exif_xmp_write_dng(dt_imgid_t imgid, const char *filename,
+                               gboolean reset_geometry, const dt_image_t *normalized_raw);
+
 gboolean dt_exif_xmp_write_reset_geometry(const dt_imgid_t imgid,
                                           const char *filename);
 
