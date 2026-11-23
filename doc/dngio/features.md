@@ -77,8 +77,9 @@ reduce file size at the cost of encoding time.
   adjustments outside that range produce a sidecar error rather than being
   silently clipped; the exported DNG remains on disk.
 - **Import to catalog** adds the exported DNG to darktable's catalog after a
-  successful **file on disk** export. It is off by default. If an XMP sidecar
-  is cloned, it is written before the file is imported, so darktable can read
+  successful **file on disk** export, preserving the current image selection
+  and lighttable or filmstrip scroll position. It is off by default. If an XMP
+  sidecar is cloned, it is written before the file is imported, so darktable can read
   those settings. Other storage targets do not import their temporary files.
 
 The default export is DNG 1.7.1 with lossless JPEG XL compression, a 50%

@@ -5,6 +5,9 @@ Changes to this fork, based on darktable 5.6.2. See the
 
 ## 5.6.2-dngio.2 — local development build
 
+- Fixed automatic catalog import after export resetting the lighttable and
+  darkroom filmstrip scroll positions. The collection refresh now preserves
+  the current position and image selection.
 - Documented command-line DNG export in the feature guide, including AppImage
   usage, compression settings, XMP cloning, cropping, persistent catalog import,
   and whole-folder conversion with Bash platform requirements.

@@ -17,6 +17,7 @@
 */
 
 #include "bauhaus/bauhaus.h"
+#include "common/collection.h"
 #include "common/darktable.h"
 #include "common/datetime.h"
 #include "common/exif.h"
@@ -48,6 +49,18 @@
 DT_MODULE(4)
 
 extern darktable_t darktable;
+
+static gboolean _refresh_export_import(gpointer user_data)
+{
+  if(darktable.gui && darktable.collection)
+  {
+    // Export adds images to the existing collection without starting a new query.
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD,
+                               DT_COLLECTION_PROP_UNDEF, NULL);
+    DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_FILMROLLS_CHANGED);
+  }
+  return G_SOURCE_REMOVE;
+}
 
 // options for conflict handling
 typedef enum dt_disk_onconflict_actions_t
@@ -560,10 +573,7 @@ try_again:
       return 1;
     }
     if(darktable.gui)
-    {
-      DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_IMAGE_IMPORT, imported);
-      DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_FILMROLLS_IMPORTED, filmid);
-    }
+      g_idle_add(_refresh_export_import, NULL);
   }
 
   dt_print(DT_DEBUG_ALWAYS, "[export_job] exported to `%s'", filename);

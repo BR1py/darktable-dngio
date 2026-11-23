@@ -66,6 +66,23 @@ Outputs use temporary directories removed after each test.
 Input sidecar writing is disabled. CTest captures failure details in its usual
 `Testing/Temporary/LastTest.log`; use `--output-on-failure` to display them.
 
+## GUI regression checks
+
+The optional GUI checks require a desktop display and a Lua-enabled DNGIO
+build. They open isolated test windows and verify that automatic catalog import
+preserves the lighttable scroll position, darkroom filmstrip position, and image
+selection while registering the exported file. Run them separately from the
+headless CTest suite:
+
+```bash
+DARKTABLE_GUI="$PWD/install-dngio/bin/darktable" \
+  python3 tests/dngio/test_gui.py -v
+```
+
+These checks use temporary catalogs, generated JPEG thumbnails, and a copy of
+`TEST6.dng`. They do not use your normal catalog or configuration. Without
+`DARKTABLE_GUI`, unittest discovery skips them.
+
 ## Extend the suite
 
 ### Benchmark export time
