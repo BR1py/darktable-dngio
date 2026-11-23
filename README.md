@@ -7,21 +7,23 @@ This fork's current development version is `5.6.2-dngio.2`, recorded in [DNGIO_V
 
 The DNGIO extension in this fork was developed through collaboration between BR1py and AI coding assistants, including assistance with implementation, debugging, testing, and documentation.
 
-See the [DNGIO changelog](doc/dngio/changelog.md) for release changes and fixes.
-
-See [DNG import and export features](doc/dngio/features.md) for supported formats, compression modes, previews, cropping, and XMP sidecars. This build can re-import every DNG mode it exports, including mosaic and linear JPEG XL DNGs (DNG Version 1.7.1).
-
-Build instructions for this fork: [build, test, and AppImage packaging](doc/dngio/build.md).
-
-For scripted conversion, see [DNG export from the command line](doc/dngio/features.md#dng-export-from-the-command-line), including a [whole-folder conversion example for Bash on Linux](doc/dngio/features.md#convert-a-whole-folder-of-raw-files).
-
-For this fork's Adobe DNG SDK integration, see [Licensing and third-party notices](LICENSING.md), including the SDK agreement, DNG attribution, and distribution requirements.
-
 ![screenshot_lighttable](https://user-images.githubusercontent.com/45535283/148689197-e53dd75f-32f1-4297-9a0f-a9547fd4e7c7.jpg)
 
 darktable is **not** a free Adobe® Lightroom® replacement.
 
 [https://www.darktable.org/](https://www.darktable.org/ "darktable homepage")
+
+## About this darktable fork
+
+See the [DNGIO changelog](doc/dngio/changelog.md) for release changes and fixes.
+
+See [DNG import and export features](doc/dngio/features.md) for supported formats, compression modes, previews, cropping, and XMP sidecars. This build can re-import every DNG mode it exports, including mosaic and linear JPEG XL DNGs (DNG Version 1.7.1).
+
+For build instructions, see [build, test, and AppImage packaging](doc/dngio/build.md). Currently, only Linux AppImage builds are supported and tested.
+
+For scripted conversion, see [DNG export from the command line](doc/dngio/features.md#dng-export-from-the-command-line), including a [whole-folder conversion example for Bash on Linux](doc/dngio/features.md#convert-a-whole-folder-of-raw-files).
+
+For this fork's Adobe DNG SDK integration, see [Licensing and third-party notices](LICENSING.md), including the SDK agreement, DNG attribution, and distribution requirements.
 
 ## Table of Contents
 
