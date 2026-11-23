@@ -10,3 +10,5 @@ tests/dngio/fixtures/TEST3.dng filter=lfs diff=lfs merge=lfs -text
 tests/dngio/fixtures/TEST4.dng filter=lfs diff=lfs merge=lfs -text
 tests/dngio/fixtures/TEST5.ORF filter=lfs diff=lfs merge=lfs -text
 tests/dngio/fixtures/TEST6.dng filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/apple-proraw-ljpeg-linear-12bit.dng filter=lfs diff=lfs merge=lfs -text
+tests/dngio/fixtures/apple-mosaic-ljpeg-16bit.dng filter=lfs diff=lfs merge=lfs -text

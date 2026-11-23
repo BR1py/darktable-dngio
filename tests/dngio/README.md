@@ -42,7 +42,11 @@ DARKTABLE_CLI="$PWD/install-dngio/bin/darktable-cli" \
 `DT_CLI` remains an alias for `DARKTABLE_CLI`. Set `EXIFTOOL` if ExifTool is
 not on PATH. Direct Python runs skip executable-dependent checks when no CLI
 is selected; skipped checks do not establish that a build works. Missing
-required fixtures fail the image tests.
+required fixtures fail the image tests. Apple-specific cases skip individually
+when their representative fixture is unavailable. Only licensed images are
+bundled; the JPEG XL case can use an ignored private local sample. Apple tests
+use `fixtures/` by default; `APPLE_DNG_DIR` can select an external directory with the same
+descriptive filenames.
 
 ## Coverage
 
@@ -52,6 +56,7 @@ required fixtures fail the image tests.
 | `dngio.import_to_catalog` | Persistent-library checks verify the default-off behavior, successful DNG transcoding and cropped/camera-raw imports, and no catalog entry after failed export. |
 | `dngio.cloned_xmp_brightness` | Rendered brightness survives cloned-XMP re-import for DNG and camera raw inputs, lossless and both lossy modes, with and without cropping. Custom sensor levels and exposure edits are retained. |
 | `dngio.fixture_privacy` | Approved fixture checksums match and metadata contains no personal names, nonzero serials, or private paths. |
+| `dngio.apple_import` | One licensed fixture per Apple DNG type checks ProRAW and mosaic loader selection. The JPEG XL brightness regression uses an ignored local sample or skips when absent. |
 | `dngio.import_fixtures` | All DNG, ARW, and ORF files in `fixtures/` render into nonempty PNGs of the requested dimensions. This includes the restored lossy mosaic DNG. |
 | `dngio.lossless_roundtrip` | TEST2 and TEST6 survive JPEG XL lossless transcoding with identical decoded 16-bit CFA samples and geometry, retained calibration metadata, and successful re-import. |
 | `dngio.camera_raw_conversion` | Sony ARW and Olympus ORF convert into JPEG XL CFA DNGs with calibration metadata and render after re-import. |

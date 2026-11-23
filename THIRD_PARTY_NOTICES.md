@@ -32,3 +32,23 @@ the build system are installed under `/usr/share/doc` inside the AppImage.
 
 No warranty is provided. Refer to each included license for its applicable
 terms, conditions, disclaimers, and attribution requirements.
+
+## Third-party DNG test images
+
+Two Apple DNG test fixtures come from [raw.pixls.us](https://raw.pixls.us/).
+The archive's [per-file catalog](https://raw.pixls.us/json/getrepository.php)
+marks both images as **CC0 1.0 Universal**, permitting copying, modification,
+and redistribution, including commercial use, without attribution requirements.
+The dedication is by the original contributors, not by this fork's author.
+See the [CC0 legal text](https://creativecommons.org/publicdomain/zero/1.0/legalcode).
+
+| Fixture | Original source | Original SHA-256 |
+| --- | --- | --- |
+| `apple-proraw-ljpeg-linear-12bit.dng` | [iPhone 12 Pro, record 4264](https://raw.pixls.us/getfile.php/4264/nice/) | `e91e77a4533ed7cce551d83330676ea5c47dd5e55fb38adda7819366afdbdfc2` |
+| `apple-mosaic-ljpeg-16bit.dng` | [iPhone 6s Plus, record 915](https://raw.pixls.us/getfile.php/915/nice/) | `845fee4f09c832af3728778737f5ae9b99124debb821b6e2066b94aed1daa91c` |
+
+The files have been renamed and GPS metadata removed. Compressed image data
+is unchanged. Checksums for the distributed copies are recorded in
+`tests/dngio/fixtures/SHA256SUMS`. These image licenses do not change the
+licenses of application code or other bundled components. No endorsement by
+Apple, raw.pixls.us, or the photographers is implied.

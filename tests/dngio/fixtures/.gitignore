@@ -1,4 +1,6 @@
 *
+# Private local regression sample: never distribute without a suitable license.
+apple-proraw-jxl-linearization.dng
 !.gitignore
 !README.md
 !LICENSE.md
@@ -12,3 +14,5 @@
 !TEST4.dng
 !TEST5.ORF
 !TEST6.dng
+!apple-proraw-ljpeg-linear-12bit.dng
+!apple-mosaic-ljpeg-16bit.dng

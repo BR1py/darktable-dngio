@@ -11,9 +11,10 @@ Changes to this fork, based on darktable 5.6.2. See the
   `LinearizationTable`.
   The decoder now applies that table while preserving the existing behavior
   for JPEG XL DNGs without one.
-- Added optional regression checks for loader selection and JPEG XL ProRAW
-  brightness using externally supplied local files. ProRAW files are not
-  included in the test suite.
+- Added Apple loader and brightness regression checks, with one CC0 fixture
+  per available type and source records in the third-party notices. JPEG XL
+  ProRAW can be checked with an ignored private local sample; cases without
+  an available fixture are skipped.
 - Grouped fork-specific README information under **About this darktable fork**
   and documented the import limitation for manufacturer-specific DNG attributes.
 - Updated the application version to `5.6.2-dngio.3`.
