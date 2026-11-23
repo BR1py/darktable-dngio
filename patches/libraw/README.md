@@ -9,7 +9,7 @@ The fork is available at [BR1py/LibRaw](https://github.com/BR1py/LibRaw), and
 DT's `.gitmodules` points to it. The local LibRaw `origin` uses this fork;
 `upstream` retains `LibRaw/LibRaw`.
 
-DT's `5.6.2-dngio.3` development branch pins LibRaw commit
+DT's `5.6.2-dngio.3` release pins LibRaw commit
 `9f992f377548359a22067782f9029d6948cb9631`. It includes the integration changes and
 explicit JPEG XL DNG linearization-table handling. The commit is published on
 branch [`5.6.2-dngio.3`](https://github.com/BR1py/LibRaw/tree/5.6.2-dngio.3).

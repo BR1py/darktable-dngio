@@ -11,7 +11,7 @@ darktable is **not** a free Adobe® Lightroom® replacement.
 
 ## About this darktable fork
 
-This fork's current development version is `5.6.2-dngio.3`, recorded in [DNGIO_VERSION](DNGIO_VERSION) and used by the splash screen, About dialog, and command-line version output.
+This fork's current release is `5.6.2-dngio.3`, recorded in [DNGIO_VERSION](DNGIO_VERSION) and used by the splash screen, About dialog, and command-line version output.
 
 The DNGIO extension in this fork was developed through collaboration between BR1py and AI coding assistants, including assistance with implementation, debugging, testing, and documentation.
 
