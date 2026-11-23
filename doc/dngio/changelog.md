@@ -8,17 +8,18 @@ Changes to this fork, based on darktable 5.6.2. See the
 - Fixed Apple ProRAW import by routing full-resolution linear RGB DNGs to
   LibRaw and the Adobe DNG SDK. Apple mosaic DNGs retain the RawSpeed path.
 - Fixed severely underexposed JPEG XL ProRAW images with an explicit
-  `LinearizationTable`, including the iPhone 16 Pro sample `IMG_1345.DNG`.
+  `LinearizationTable`.
   The decoder now applies that table while preserving the existing behavior
   for JPEG XL DNGs without one.
-- Added optional Apple sample regression checks for loader selection and
-  JPEG XL ProRAW brightness.
+- Added optional regression checks for loader selection and JPEG XL ProRAW
+  brightness using externally supplied local files. ProRAW files are not
+  included in the test suite.
 - Grouped fork-specific README information under **About this darktable fork**
   and documented the import limitation for manufacturer-specific DNG attributes.
 - Updated the application version to `5.6.2-dngio.3`.
 
-Validation: the new brightness regression, loader checks for six earlier Apple
-samples, lossless round trips, and compression/version checks passed. Apple's
+Validation: brightness and loader checks using external local Apple files,
+lossless round trips, and compression/version checks passed. Apple's
 profile gain map, embedded tone curve, and baseline exposure adjustment are
 not applied by this import path; matching the manufacturer’s preview is not
 guaranteed. No version 3 AppImage has been built or released.
