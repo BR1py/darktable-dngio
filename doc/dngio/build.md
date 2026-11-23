@@ -10,7 +10,7 @@ Install Git LFS before cloning the repository, then obtain the submodules and
 approved test images:
 
 ```bash
-git clone --branch dngio-5.6.2 --recurse-submodules https://github.com/BR1py/darktable-dngio.git
+git clone --branch dngio-main --recurse-submodules https://github.com/BR1py/darktable-dngio.git
 cd darktable-dngio
 git lfs pull
 sudo tools/install-dngio-build-deps.sh

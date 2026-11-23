@@ -3,7 +3,7 @@
 
 darktable is an open source photography workflow application and non-destructive raw developer - a virtual lighttable and darkroom for photographers. It manages your digital negatives in a database, lets you view them through a zoomable lighttable and enables you to develop raw images, enhance them and export them to local or remote storage.
 
-This fork's current development version is `5.6.2-dngio.2`, recorded in [DNGIO_VERSION](DNGIO_VERSION) and used by the splash screen, About dialog, and command-line version output.
+This fork's current release is `5.6.2-dngio.2`, recorded in [DNGIO_VERSION](DNGIO_VERSION) and used by the splash screen, About dialog, and command-line version output.
 
 The DNGIO extension in this fork was developed through collaboration between BR1py and AI coding assistants, including assistance with implementation, debugging, testing, and documentation.
 

@@ -3,7 +3,7 @@
 Changes to this fork, based on darktable 5.6.2. See the
 [feature overview](features.md) for usage and supported formats.
 
-## 5.6.2-dngio.2 — local development build
+## 5.6.2-dngio.2 — published
 
 - Fixed automatic catalog import after export resetting the lighttable and
   darkroom filmstrip scroll positions. The collection refresh now preserves
@@ -24,7 +24,9 @@ Changes to this fork, based on darktable 5.6.2. See the
   retain their settings, with automatic catalog import initially disabled.
 
 The local build passed all 13 configured tests and a packaged brightness/catalog
-import check. Version 2 is under development and has not been released.
+import check. The scroll-position improvement was also tested manually.
+
+[Release and AppImage download](https://github.com/BR1py/darktable-dngio/releases/tag/5.6.2-dngio.2).
 
 For previously affected images, re-export from the original raw file to a new
 filename to generate corrected XMP. Existing catalog histories are not rewritten
