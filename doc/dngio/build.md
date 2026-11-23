@@ -62,7 +62,7 @@ temporary storage. `INSTALL_DIR`, `APPDIR`, `OUTPUT_DIR`, and `TOOLS_DIR` can
 select other locations. `APPIMAGE_OUTPUT` overrides the full output filename.
 
 For this release the default artifact name is
-`darktable-5.6.2-dngio.2-x86_64.AppImage` on x86-64. Test the actual artifact,
+`darktable-5.6.2-dngio.3-x86_64.AppImage` on x86-64. Test the actual artifact,
 not only its installation directory, before publishing it. Building on a recent
 Linux distribution does not establish compatibility with older systems.
 

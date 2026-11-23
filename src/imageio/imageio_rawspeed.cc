@@ -25,6 +25,8 @@
 #include "metadata/CameraMetadataException.h"
 #include "parsers/RawParserException.h"
 #include "parsers/FiffParserException.h"
+#include "tiff/TiffEntry.h"
+#include "tiff/TiffIFD.h"
 
 #define TYPE_FLOAT32 RawImageType::F32
 #define TYPE_USHORT16 RawImageType::UINT16
@@ -194,6 +196,28 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
     std::unique_ptr<RawDecoder> d = t.getDecoder(meta);
 
     if(!d.get()) return DT_IMAGEIO_UNSUPPORTED_FORMAT;
+
+#ifdef HAVE_ADOBE_DNG_SDK
+    const TiffIFD *root = d->getRootIFD();
+    if(root && root->hasEntryRecursive(TiffTag::DNGVERSION)
+       && !g_ascii_strcasecmp(img->exif_maker, "Apple"))
+    {
+      for(const TiffIFD *ifd : root->getIFDsWithTag(TiffTag::PHOTOMETRICINTERPRETATION))
+      {
+        // Apple ProRAW stores a full-resolution linear RGB image, not a CFA mosaic.
+        if(ifd->getEntry(TiffTag::PHOTOMETRICINTERPRETATION)->getU32() == 34892
+           && ifd->hasEntry(TiffTag::SAMPLESPERPIXEL)
+           && ifd->getEntry(TiffTag::SAMPLESPERPIXEL)->getU32() == 3
+           && (!ifd->hasEntry(TiffTag::NEWSUBFILETYPE)
+               || ifd->getEntry(TiffTag::NEWSUBFILETYPE)->getU32() == 0))
+        {
+          dt_print(DT_DEBUG_IMAGEIO,
+                   "[rawspeed_open] delegating Apple ProRAW to LibRaw/Adobe DNG SDK");
+          return DT_IMAGEIO_UNSUPPORTED_FORMAT;
+        }
+      }
+    }
+#endif
 
     d->failOnUnknown = true;
     d->checkSupport(meta);

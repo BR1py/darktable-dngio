@@ -1,4 +1,4 @@
-# DNG import and export in 5.6.2-dngio.2
+# DNG import and export in 5.6.2-dngio.3
 
 This release extends darktable 5.6.2 with Adobe DNG SDK support for importing
 and exporting DNG files. Every supported DNG export mode can be imported again
@@ -19,6 +19,9 @@ The Adobe SDK handles DNG decoding paths that need it, including linear DNG
 processing and its associated DNG opcodes. Existing raw import paths remain
 available for other supported files. The exported combinations in the table
 below can all be reopened for further editing.
+
+We cannot guarantee that every manufacturer-specific DNG attribute is applied
+during import. The rendered image may differ from the manufacturer’s preview.
 
 ## Export
 
