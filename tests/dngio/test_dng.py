@@ -207,6 +207,8 @@ class DngTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 for key, value in json.loads(result.stdout)[0].items():
                     tag = key.split(":")[-1]
+                    if name.startswith("apple-"):
+                        self.assertFalse(tag.startswith("GPS"), key)
                     if "Serial" in tag:
                         self.assertFalse(str(value).strip("0 "), key)
                     if tag in ("Artist", "Copyright", "Creator", "Rights"):

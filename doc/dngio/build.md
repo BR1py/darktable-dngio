@@ -42,8 +42,8 @@ export, and dngio integration tests, and report the base version without the
 DNGIO suffix. Other shared DT source changes remain part of this fork.
 
 LibRaw is a submodule pinned to published commit
-`1b58cd78f3b1ab3cc3cd930650fcc7d2943367c6` in `BR1py/LibRaw`, on branch
-`0.22.0-dt_dngio.1` (LibRaw 0.22.0). The integration patch is also recorded in
+`9f992f377548359a22067782f9029d6948cb9631` in `BR1py/LibRaw`, on branch
+`5.6.2-dngio.3` (LibRaw 0.22.0). The integration patch is also recorded in
 `patches/libraw/`; the build helper recognizes that the pinned source already
 contains it.
 
@@ -62,7 +62,7 @@ temporary storage. `INSTALL_DIR`, `APPDIR`, `OUTPUT_DIR`, and `TOOLS_DIR` can
 select other locations. `APPIMAGE_OUTPUT` overrides the full output filename.
 
 For this release the default artifact name is
-`darktable-5.6.2-dngio.2-x86_64.AppImage` on x86-64. Test the actual artifact,
+`darktable-5.6.2-dngio.3-x86_64.AppImage` on x86-64. Test the actual artifact,
 not only its installation directory, before publishing it. Building on a recent
 Linux distribution does not establish compatibility with older systems.
 

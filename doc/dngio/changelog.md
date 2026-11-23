@@ -3,6 +3,31 @@
 Changes to this fork, based on darktable 5.6.2. See the
 [feature overview](features.md) for usage and supported formats.
 
+## 5.6.2-dngio.3 — published
+
+- Fixed Apple ProRAW import by routing full-resolution linear RGB DNGs to
+  LibRaw and the Adobe DNG SDK. Apple mosaic DNGs retain the RawSpeed path.
+- Fixed severely underexposed JPEG XL ProRAW images with an explicit
+  `LinearizationTable`.
+  The decoder now applies that table while preserving the existing behavior
+  for JPEG XL DNGs without one.
+- Added Apple loader and brightness regression checks, with one CC0 fixture
+  per available type and source records in the third-party notices. JPEG XL
+  ProRAW can be checked with an ignored private local sample; cases without
+  an available fixture are skipped.
+- Grouped fork-specific README information under **About this darktable fork**
+  and documented the import limitation for manufacturer-specific DNG attributes.
+- Updated the application version to `5.6.2-dngio.3`.
+
+Validation: brightness and loader checks using external local Apple files,
+lossless round trips, and compression/version checks passed. Apple's
+profile gain map, embedded tone curve, and baseline exposure adjustment are
+not applied by this import path; matching the manufacturer’s preview is not
+guaranteed. The x86-64 Linux AppImage passed its version check and all three
+Apple import checks, including the JPEG XL brightness regression.
+
+[Release and AppImage download](https://github.com/BR1py/darktable-dngio/releases/tag/5.6.2-dngio.3).
+
 ## 5.6.2-dngio.2 — published
 
 - Fixed automatic catalog import after export resetting the lighttable and
